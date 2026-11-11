@@ -2,6 +2,22 @@
 
 **By NyxBorn**
 
+<p>
+  <a href="https://recomplauncher.com/game/crash-tag-team-racing-pc">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://recomplauncher.com/assets/press/launcher/badge-light.svg">
+      <img src="https://recomplauncher.com/assets/press/launcher/badge-dark.svg" alt="Get it on RecompLauncher" height="56">
+    </picture>
+  </a>
+  &nbsp;
+  <a href="https://recompstore.com/dev/miguel0827">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://recompstore.com/assets/press/verified-light.svg">
+      <img src="https://recompstore.com/assets/press/verified-dark.svg" alt="Verified developer on RecompStore" height="56">
+    </picture>
+  </a>
+</p>
+
 Native PC port of *Crash Tag Team Racing* (PlayStation 2) built with [ps2-native-recomp](https://github.com/exoteric33/ps2-native-recomp): the game's own code is translated to C++ and compiled for Windows **on your PC, from your own disc**. This project contains **no game code, no game data and no disc images**.
 
 *Port nativo para PC de Crash Tag Team Racing (PS2). El juego se convierte en tu PC a partir de tu propia copia. Este proyecto no contiene nada del juego.* (Español abajo.)
@@ -45,6 +61,12 @@ Everything stays in this folder: the installer creates **`engine/`** next to `to
 
 Do not share ISOs, the converted program (`ps2run.exe` and the generated C++), or saves. They contain the game, which belongs to its owners.
 
+## Reporting problems
+
+Only the **official releases** are supported: the [Releases](https://github.com/Miguel0827/Crash-Tag-Team-Racing-PC/releases) page and RecompLauncher. Other branches (such as `multiplayer`) are unfinished work in progress: please do not report problems from them.
+
+[Open a bug report](https://github.com/Miguel0827/Crash-Tag-Team-Racing-PC/issues/new/choose) and say which disc version you have and what graphics card you use.
+
 ## Credits and licences
 
 - [ps2-native-recomp](https://github.com/exoteric33/ps2-native-recomp) © Samir Nuri and exoteric33, MIT licence. The fixes in `patches/` are under the same licence.
@@ -64,3 +86,5 @@ En el juego, **F1** abre el menú rápido. La versión europea trae español; la
 Todo queda en esta carpeta: el instalador crea **`engine`** con el convertidor, sus herramientas y tus juegos convertidos, partidas y configuración. Bórrala antes de compartir o subir la carpeta.
 
 No compartas ISOs ni el juego convertido: contienen el juego, que es de sus dueños.
+
+Solo se aceptan reportes de errores de las **versiones oficiales** (página de [Releases](https://github.com/Miguel0827/Crash-Tag-Team-Racing-PC/releases) y RecompLauncher). Las demás ramas, como `multiplayer`, están en desarrollo y sin terminar: no reportes errores de ellas.

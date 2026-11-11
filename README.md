@@ -8,19 +8,8 @@
 **By NyxBorn**
 
 <p>
-  <a href="https://recomplauncher.com/game/crash-tag-team-racing-pc">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://recomplauncher.com/assets/press/launcher/badge-light.svg">
-      <img src="https://recomplauncher.com/assets/press/launcher/badge-dark.svg" alt="Get it on RecompLauncher" height="56">
-    </picture>
-  </a>
-  &nbsp;
-  <a href="https://recompstore.com/dev/miguel0827">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://recompstore.com/assets/press/verified-light.svg">
-      <img src="https://recompstore.com/assets/press/verified-dark.svg" alt="Verified developer on RecompStore" height="56">
-    </picture>
-  </a>
+<a href="https://recomplauncher.com/game/crash-tag-team-racing-pc"><picture><source media="(prefers-color-scheme: dark)" srcset="https://recomplauncher.com/assets/press/launcher/badge-light.svg"><img src="https://recomplauncher.com/assets/press/launcher/badge-dark.svg" alt="Get it on RecompLauncher" height="56"></picture></a>
+<a href="https://recompstore.com/dev/miguel0827"><picture><source media="(prefers-color-scheme: dark)" srcset="https://recompstore.com/assets/press/verified-light.svg"><img src="https://recompstore.com/assets/press/verified-dark.svg" alt="Verified developer on RecompStore" height="56"></picture></a>
 </p>
 
 **[Download the latest version](https://github.com/Miguel0827/Crash-Tag-Team-Racing-PC/releases/latest)** · [Report a problem](https://github.com/Miguel0827/Crash-Tag-Team-Racing-PC/issues/new/choose)

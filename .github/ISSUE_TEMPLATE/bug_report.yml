@@ -1,0 +1,52 @@
+name: Bug report / Reportar un error
+description: Something does not work in an official release. / Algo no funciona en una versión oficial.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Only **official releases** are supported (Releases page or RecompLauncher). Branches such as `multiplayer` are unfinished: reports about them will be closed.
+        Solo se aceptan reportes de **versiones oficiales** (Releases o RecompLauncher). Ramas como `multiplayer` están sin terminar: esos reportes se cerrarán.
+  - type: checkboxes
+    id: official
+    attributes:
+      label: Official release / Versión oficial
+      options:
+        - label: I am using an official release, not a development branch. / Uso una versión oficial, no una rama en desarrollo.
+          required: true
+  - type: input
+    id: version
+    attributes:
+      label: Port version / Versión del port
+      placeholder: v1.0.0
+    validations:
+      required: true
+  - type: dropdown
+    id: disc
+    attributes:
+      label: Disc version / Versión del disco
+      options:
+        - Europe / Australia (SLES-53439)
+        - USA / Latin America (SLUS-21191)
+    validations:
+      required: true
+  - type: input
+    id: gpu
+    attributes:
+      label: Graphics card and Windows version / Tarjeta gráfica y versión de Windows
+      placeholder: NVIDIA GTX 1650, Windows 11
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened? / ¿Qué pasó?
+      description: What you did, what you expected and what happened instead. / Qué hiciste, qué esperabas y qué pasó.
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Log / Registro
+      description: "If the installation failed, paste the end of %TEMP%\\cttr-pc-install.log here. / Si la instalación falló, pega aquí el final de %TEMP%\\cttr-pc-install.log."
+      render: text

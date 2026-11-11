@@ -1,10 +1,8 @@
 MIT License
 
 Copyright (c) 2026 NyxBorn
-
-The fixes in patches/cttr-fixes.patch modify ps2-native-recomp
-(https://github.com/exoteric33/ps2-native-recomp), Copyright (c) Samir Nuri and
-exoteric33, which is also released under the MIT License.
+Copyright (c) 2026 Samir Nuri
+Copyright (c) 2026 exoteric33
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -23,7 +21,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
-Crash Tag Team Racing is a trademark of Activision. This project is not
-affiliated with or endorsed by Activision or Radical Entertainment and contains
-no part of the game.

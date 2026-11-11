@@ -1,0 +1,849 @@
+diff --git a/host/keymap.cpp b/host/keymap.cpp
+index e9fcf9e..acb36d6 100644
+--- a/host/keymap.cpp
++++ b/host/keymap.cpp
+@@ -166,6 +166,21 @@ const char *sharp_2d_word(int sharp) {
+ 
+ std::string with_sharp_2d(const std::string &file_text, int sharp) { return with_line(file_text, "sharp2d", std::string("sharp_2d = ") + sharp_2d_word(sharp)); }
+ 
++std::string with_vsync(const std::string &file_text, int vsync) { return with_line(file_text, "vsync", std::string("vsync = ") + (vsync == 1 ? "on" : "off")); }
++
++std::string with_stick_deadzone(const std::string &file_text, int percent) {
++    return with_line(file_text, "stickdeadzone", "stick_deadzone = " + std::to_string(percent));
++}
++
++const char *invert_word(int invert) {
++    static const char *const kWords[] = {"off", "x", "y", "both"};
++    return kWords[invert >= 0 && invert <= 3 ? invert : 0];
++}
++
++std::string with_right_invert(const std::string &file_text, int invert) {
++    return with_line(file_text, "rightinvert", std::string("right_invert = ") + invert_word(invert));
++}
++
+ bool is_reserved(int input) {
+     return input == SDL_SCANCODE_F1 || input == SDL_SCANCODE_F2 || input == SDL_SCANCODE_F5 || input == SDL_SCANCODE_F8 || input == SDL_SCANCODE_F9 || input == SDL_SCANCODE_F11;
+ }
+@@ -281,6 +296,30 @@ void parse(const std::string &text, Config &config, std::vector<std::string> &pr
+             else bad("scale is 1, 2, 3 or 4, ignored");
+             continue;
+         }
++        if (name == "vsync") {
++            const std::string v = squash(value);
++            if (v == "on" || v == "1" || v == "yes") config.vsync = 1;
++            else if (v == "off" || v == "0" || v == "no") config.vsync = 0;
++            else bad("vsync is on or off, ignored");
++            continue;
++        }
++        if (name == "stickdeadzone") {
++            char *tail = nullptr;
++            const long v = std::strtol(value.c_str(), &tail, 10);
++            if (value.empty() || *tail || v < 0 || v > 40) bad("stick_deadzone is a number from 0 to 40 (percent), ignored");
++            else config.stick_deadzone = static_cast<int>(v);
++            continue;
++        }
++        if (name == "rightinvert") {
++            const std::string v = squash(value);
++            int found = -1;
++            for (int i = 0; i < 4; ++i)
++                if (v == invert_word(i) || v == std::to_string(i)) found = i;
++            if (v == "xy") found = 3;
++            if (found < 0) bad("right_invert is off, x, y or both, ignored");
++            else config.right_invert = found;
++            continue;
++        }
+         if (name == "sharp2d") {
+             const std::string v = squash(value);
+             int found = -1;
+diff --git a/host/keymap.hpp b/host/keymap.hpp
+index 4a0b82c..198b3aa 100644
+--- a/host/keymap.hpp
++++ b/host/keymap.hpp
+@@ -36,6 +36,9 @@ struct Config {
+     int look = -1;             // the picture look (F2) written in keys.ini, -1 when the file has no 'look' line
+     int scale = 0;             // the inner resolution (1 to 4 times the console's) used at the next start, 0 when the file has no 'scale' line
+     int sharp_2d = -1;         // how upscaled 2D art is filtered (0 soft, 1 sharp, 2 sharpest) at the next start, -1 when the file has no line
++    int vsync = -1;            // 1 on (the picture waits for the screen's refresh: no tearing), 0 off, -1 when the file has no line (off)
++    int stick_deadzone = 0;    // 0 to 40 percent: a controller's stick closer to the middle than that counts as the middle (both sticks)
++    int right_invert = 0;      // the controller's right stick turned round: 0 no, 1 left-right, 2 up-down, 3 both (the camera in most games)
+ };
+ 
+ // The picture looks the F2 key goes through. The number is also the video option bits (ps2/video.hpp): bit 0 smooth edges, bit 1 soft, bit 2 sharp (look 4: cubic enlargement + light sharpening; look 5 = sharp + smooth edges).
+@@ -50,6 +53,11 @@ std::string with_scale(const std::string &file_text, int scale);
+ // the same for the 'sharp_2d' line (the quick menu's 2D art filter, used when the game starts the next time)
+ std::string with_sharp_2d(const std::string &file_text, int sharp);
+ const char *sharp_2d_word(int sharp);  // "soft", "sharp", "sharpest"
++// the same for 'vsync', 'stick_deadzone' and 'right_invert' (the quick menu's controller and screen lines)
++std::string with_vsync(const std::string &file_text, int vsync);
++std::string with_stick_deadzone(const std::string &file_text, int percent);
++std::string with_right_invert(const std::string &file_text, int invert);
++const char *invert_word(int invert);  // "off", "x", "y", "both"
+ 
+ const char *action_name(int action);  // the word used in keys.ini
+ 
+diff --git a/host/quickmenu.cpp b/host/quickmenu.cpp
+index 2857114..5ddf914 100644
+--- a/host/quickmenu.cpp
++++ b/host/quickmenu.cpp
+@@ -107,11 +107,59 @@ constexpr const char *kFont[95] = {
+     "..... ..... .#... #.#.# ...#. ..... ..... .....",  // ~
+ };
+ 
+-constexpr int kEntries = 10;
+-constexpr Command kCommands[kEntries] = {Command::resume,   Command::save,       Command::load, Command::look,        Command::scale,
+-                                         Command::sharp_2d, Command::fullscreen, Command::keys, Command::change_keys, Command::quit};
++// The letters of Spanish beyond ASCII, in the same 5 x 8 style (the accent in rows 0 and 1 above a small letter), for the Spanish menu.
++struct Extra {
++    unsigned code;  // Unicode
++    const char *glyph;
++};
++constexpr Extra kExtra[] = {
++    {0xE1, "...#. ..#.. .###. ....# .#### #...# .#### ....."},  // á
++    {0xE9, "...#. ..#.. .###. #...# ##### #.... .###. ....."},  // é
++    {0xED, "...#. ..#.. .##.. ..#.. ..#.. ..#.. .###. ....."},  // í
++    {0xF3, "...#. ..#.. .###. #...# #...# #...# .###. ....."},  // ó
++    {0xFA, "...#. ..#.. #...# #...# #...# #..## .##.# ....."},  // ú
++    {0xFC, ".#.#. ..... #...# #...# #...# #..## .##.# ....."},  // ü
++    {0xF1, ".##.# #..#. #.##. ##..# #...# #...# #...# ....."},  // ñ
++    {0xD1, ".##.# #..#. #...# ##..# #.#.# #..## #...# ....."},  // Ñ
++    {0xC1, "...#. ..#.. .###. #...# ##### #...# #...# ....."},  // Á
++    {0xC9, "...#. ..#.. ##### #.... ####. #.... ##### ....."},  // É
++    {0xBF, "..#.. ..... ..#.. .#... #.... #...# .###. ....."},  // ¿
++    {0xA1, "..#.. ..... ..#.. ..#.. ..#.. ..#.. ..#.. ....."},  // ¡
++};
++
++bool g_spanish = false;
++
++const char *glyph_of(unsigned code) {
++    if (code >= 32 && code <= 126) return kFont[code - 32];
++    for (const Extra &e : kExtra)
++        if (e.code == code) return e.glyph;
++    return kFont['?' - 32];
++}
++
++// UTF-8 to Unicode, one letter at a time (the menu's strings only use one- and two-byte letters)
++std::vector<unsigned> letters(const std::string &s) {
++    std::vector<unsigned> out;
++    for (std::size_t i = 0; i < s.size(); ++i) {
++        const unsigned char c = static_cast<unsigned char>(s[i]);
++        if (c >= 0xC0 && c < 0xE0 && i + 1 < s.size()) {
++            out.push_back(((c & 0x1Fu) << 6) | (static_cast<unsigned char>(s[i + 1]) & 0x3Fu));
++            ++i;
++        } else {
++            out.push_back(c);
++        }
++    }
++    return out;
++}
++
++// the width of a line in letters (not bytes)
++int width_of(const std::string &s) { return static_cast<int>(letters(s).size()); }
++
++constexpr int kEntries = 12;
++constexpr Command kCommands[kEntries] = {Command::resume,   Command::save,  Command::load,       Command::look,   Command::scale,
++                                         Command::sharp_2d, Command::vsync, Command::fullscreen, Command::invert, Command::keys,
++                                         Command::change_keys, Command::quit};
+ // the program's key for the same thing, shown dim at the right end of the entry
+-constexpr const char *kKeys[kEntries] = {"F1", "F5", "F8", "F2", "", "", "F11", "", "", ""};
++constexpr const char *kKeys[kEntries] = {"F1", "F5", "F8", "F2", "", "", "", "F11", "", "", "", ""};
+ constexpr int kVisibleRows = 11;  // lines of the keys page shown at once; the page scrolls
+ constexpr int kKeysPageChars = 58;
+ 
+@@ -130,8 +178,8 @@ struct Canvas {
+     }
+     // one letter is 5 x 8 pixels of the font, each `s` x `s` screen pixels; a letter is 6 font pixels wide with its gap
+     void text(int x, int y, int s, const std::string &line, std::uint32_t color) {
+-        for (unsigned char c : line) {
+-            const char *glyph = kFont[(c >= 32 && c <= 126 ? c : '?') - 32];
++        for (unsigned c : letters(line)) {
++            const char *glyph = glyph_of(c);
+             for (int row = 0; row < 8; ++row)
+                 for (int col = 0; col < 5; ++col)
+                     if (glyph[row * 6 + col] == '#') fill(x + col * s, y + row * s, s, s, color);
+@@ -141,32 +189,47 @@ struct Canvas {
+ };
+ 
+ std::string entry_text(int i, const Values &v, bool quit_armed) {
++    const std::string next_start = tr("  at the next start", "  al reiniciar");
++    const std::string on = tr("on", "sí"), off = tr("off", "no");
+     switch (kCommands[i]) {
+-    case Command::resume: return "Resume";
+-    case Command::save: return "Quick save";
+-    case Command::load: return "Quick load";
+-    case Command::look: return "Picture look:  < " + v.look + " >";
++    case Command::resume: return tr("Resume", "Continuar");
++    case Command::save: return tr("Quick save", "Guardado rápido");
++    case Command::load: return tr("Quick load", "Carga rápida");
++    case Command::look: return tr("Picture look:  < ", "Estilo de imagen:  < ") + v.look + " >";
+     case Command::scale: {
+         const std::string now = std::to_string(v.scale_now) + "x";
+-        if (v.scale_locked) return "Resolution: " + now + " (set by PS2_SCALE)";
+-        return "Resolution:  < " + std::to_string(v.scale_next) + "x >" + (v.scale_next != v.scale_now ? "  at the next start" : "");
++        if (v.scale_locked) return tr("Resolution: ", "Resolución: ") + now + tr(" (set by PS2_SCALE)", " (fijada por PS2_SCALE)");
++        return tr("Resolution:  < ", "Resolución:  < ") + std::to_string(v.scale_next) + "x >" + (v.scale_next != v.scale_now ? next_start : "");
+     }
+     case Command::sharp_2d: {
+         static const char *const kNames[] = {"soft", "sharp", "sharpest"};
+-        const auto name = [](int n) { return kNames[n >= 0 && n <= 2 ? n : 1]; };
+-        if (v.sharp_locked) return std::string("Text and menus: ") + name(v.sharp_now) + " (set by PS2_SHARP_2D)";
+-        return std::string("Text and menus:  < ") + name(v.sharp_next) + " >" + (v.sharp_next != v.sharp_now ? "  at the next start" : "");
++        static const char *const kNamesEs[] = {"suave", "nítido", "muy nítido"};
++        const auto name = [](int n) { return (spanish() ? kNamesEs : kNames)[n >= 0 && n <= 2 ? n : 1]; };
++        if (v.sharp_locked) return tr("Text and menus: ", "Textos y menús: ") + std::string(name(v.sharp_now)) + tr(" (set by PS2_SHARP_2D)", " (fijado por PS2_SHARP_2D)");
++        return tr("Text and menus:  < ", "Textos y menús:  < ") + std::string(name(v.sharp_next)) + " >" + (v.sharp_next != v.sharp_now ? next_start : "");
++    }
++    case Command::vsync:
++        return tr("Vertical sync:  < ", "Sincronización vertical:  < ") + (v.vsync_next ? on : off) + " >" + (v.vsync_next != v.vsync_now ? next_start : "");
++    case Command::fullscreen: return tr("Full screen: ", "Pantalla completa: ") + (v.fullscreen ? on : off);
++    case Command::deadzone: return tr("Stick dead zone:  < ", "Zona muerta de sticks:  < ") + std::to_string(v.deadzone) + "% >";
++    case Command::invert: {
++        static const char *const kEn[] = {"off", "left-right", "up-down", "both"};
++        static const char *const kEs[] = {"no", "horizontal", "vertical", "ambos"};
++        const int n = v.invert >= 0 && v.invert <= 3 ? v.invert : 0;
++        return tr("Invert right stick:  < ", "Invertir stick derecho:  < ") + std::string(spanish() ? kEs[n] : kEn[n]) + " >";
+     }
+-    case Command::fullscreen: return std::string("Full screen: ") + (v.fullscreen ? "on" : "off");
+-    case Command::keys: return "Show keys";
+-    case Command::change_keys: return "Change keys";
+-    case Command::quit: return quit_armed ? "Really quit?  Enter / Cross again" : "Quit the game";
++    case Command::keys: return tr("Show keys", "Ver teclas");
++    case Command::change_keys: return tr("Change keys", "Cambiar teclas");
++    case Command::quit: return quit_armed ? tr("Really quit?  Enter / Cross again", "¿Salir de verdad?  Enter / X otra vez") : tr("Quit the game", "Salir del juego");
+     default: return "";
+     }
+ }
+ 
+ }  // namespace
+ 
++void set_language(const std::string &code) { g_spanish = code.size() >= 2 && (code[0] == 'e' || code[0] == 'E') && (code[1] == 's' || code[1] == 'S'); }
++bool spanish() { return g_spanish; }
++
+ int Menu::count() const { return page_ == Page::keys ? key_rows_ + 2 : kEntries; }
+ 
+ void Menu::fit() {
+@@ -241,7 +304,10 @@ Command Menu::choose() {
+ Command Menu::side() const {
+     if (page_ == Page::keys) return Command::none;
+     const Command c = kCommands[selected_];
+-    return c == Command::look || c == Command::scale || c == Command::sharp_2d || c == Command::fullscreen ? c : Command::none;
++    return c == Command::look || c == Command::scale || c == Command::sharp_2d || c == Command::fullscreen || c == Command::vsync || c == Command::deadzone ||
++                   c == Command::invert
++               ? c
++               : Command::none;
+ }
+ 
+ bool Menu::select_at(int x, int y) {
+@@ -263,8 +329,10 @@ bool Menu::select_at(int x, int y) {
+ }
+ 
+ void Menu::draw_keys(int window_width, int window_height, const Values &values, Picture &out) {
+-    static const std::string kTitleText = "Change keys - the game waits", kHint = "Enter / click: change a key     Esc / Circle: back",
+-                             kFixed = "Not usable: F1 F2 F5 F8 F9 F11 (the program's)", kCapture = "Press a key or mouse button... (Esc: cancel)";
++    const std::string kTitleText = tr("Change keys - the game waits", "Cambiar teclas - el juego espera"),
++                      kHint = tr("Enter / click: change a key     Esc / Circle: back", "Enter / clic: cambiar una tecla     Esc / Círculo: volver"),
++                      kFixed = tr("Not usable: F1 F2 F5 F8 F9 F11 (the program's)", "No se pueden usar: F1 F2 F5 F8 F9 F11 (del programa)"),
++                      kCapture = tr("Press a key or mouse button... (Esc: cancel)", "Pulsa una tecla o botón del ratón... (Esc: cancelar)");
+     key_rows_ = static_cast<int>(values.key_rows.size());
+     fit();
+     const int n = key_rows_, shown = std::min(n, kVisibleRows);
+@@ -289,8 +357,8 @@ void Menu::draw_keys(int window_width, int window_height, const Values &values,
+     int y = pad * s;
+     c.text(text_x, y, s, kTitleText, kTitle);
+     if (n > shown) {
+-        const std::string where = std::to_string(top_ + 1) + "-" + std::to_string(top_ + shown) + " of " + std::to_string(n);
+-        c.text(out.width - text_x - static_cast<int>(where.size()) * 6 * s + s, y, s, where, kDim);
++        const std::string where = std::to_string(top_ + 1) + "-" + std::to_string(top_ + shown) + tr(" of ", " de ") + std::to_string(n);
++        c.text(out.width - text_x - width_of(where) * 6 * s + s, y, s, where, kDim);
+     }
+     y += 8 * s + 6 * s;
+     c.fill(pad * s, y, inner_w, std::max(1, s / 2), kFrame);
+@@ -315,8 +383,10 @@ void Menu::draw_keys(int window_width, int window_height, const Values &values,
+     }
+     y += 3 * s;
+     footer_y_ = out.y + y;
+-    line(n, defaults_armed_ ? "Really put back the default keys?  Enter / Cross again" : "Put back the default keys", "");
+-    line(n + 1, "Back", "");
++    line(n, defaults_armed_ ? tr("Really put back the default keys?  Enter / Cross again", "¿Volver a las teclas de fábrica?  Enter / X otra vez")
++                            : tr("Put back the default keys", "Volver a las teclas de fábrica"),
++         "");
++    line(n + 1, tr("Back", "Volver"), "");
+     y += 5 * s;
+     c.fill(pad * s, y, inner_w, std::max(1, s / 2), kFrame);
+     y += 6 * s;
+@@ -332,12 +402,13 @@ void Menu::draw(int window_width, int window_height, const Values &values, Pictu
+         draw_keys(window_width, window_height, values, out);
+         return;
+     }
+-    static const std::string kTitleText = "Quick menu - the game waits", kHint = "Enter / Cross: OK     F1 / Esc / Circle: back";
++    const std::string kTitleText = tr("Quick menu - the game waits", "Menú rápido - el juego espera"),
++                      kHint = tr("Enter / Cross: OK     F1 / Esc / Circle: back", "Enter / X: aceptar     F1 / Esc / Círculo: volver   < >: cambiar");
+     std::string lines[kEntries];
+-    std::size_t chars = std::max(kTitleText.size(), kHint.size());
++    std::size_t chars = static_cast<std::size_t>(std::max(width_of(kTitleText), width_of(kHint)));
+     for (int i = 0; i < kEntries; ++i) {
+         lines[i] = entry_text(i, values, quit_armed_);
+-        chars = std::max(chars, lines[i].size() + 5);  // room for the dim key at the right end
++        chars = std::max(chars, static_cast<std::size_t>(width_of(lines[i])) + 5);  // room for the dim key at the right end
+     }
+     // everything in font pixels first; one font pixel is `s` window pixels, as big as fits in about 80 % of the window
+     const int pad = 8, bar_h = 14, bar_pad = 5;
+@@ -380,7 +451,7 @@ void Menu::draw(int window_width, int window_height, const Values &values, Pictu
+ 
+ void Menu::draw_note(int window_width, int window_height, const std::string &text, Picture &out) {
+     const int pad = 5;
+-    const int units_w = 2 * pad + static_cast<int>(text.size()) * 6, units_h = 2 * pad + 8;
++    const int units_w = 2 * pad + width_of(text) * 6, units_h = 2 * pad + 8;
+     const int s = std::clamp(std::min(window_height / 240, window_width * 9 / 10 / units_w), 1, 6);
+     out.width = units_w * s;
+     out.height = units_h * s;
+diff --git a/host/quickmenu.hpp b/host/quickmenu.hpp
+index 0d7f486..9d20480 100644
+--- a/host/quickmenu.hpp
++++ b/host/quickmenu.hpp
+@@ -12,8 +12,15 @@
+ 
+ namespace quickmenu {
+ 
++// The menu's language: "es" Spanish, anything else English (PS2_MENU_LANG; the window sets it once at the start).
++void set_language(const std::string &code);
++bool spanish();
++// English or Spanish, as set_language chose (the strings are UTF-8; the font has the accented letters of Spanish)
++inline const char *tr(const char *english, const char *spanish_text) { return spanish() ? spanish_text : english; }
++
+ enum class Command {
+     none, resume, save, load, look, scale, sharp_2d, fullscreen, keys, quit,
++    vsync, deadzone, invert,  // screen: wait for the refresh; controller: the sticks' dead zone, the right stick turned round
+     change_keys,   // the main menu's entry that opens the keys page (the menu switches page by itself)
+     key_edit,      // keys page: the highlighted line waits for a key (capturing() is true from now on)
+     key_defaults   // keys page: put back the default keys (asked once, like Quit)
+@@ -28,6 +35,9 @@ struct Values {
+     int sharp_now = 1, sharp_next = 1;  // the 2D art filter (0 soft, 1 sharp, 2 sharpest): this run's, and keys.ini's for the next start
+     bool sharp_locked = false;  // PS2_SHARP_2D is set
+     bool fullscreen = false;
++    bool vsync_now = false, vsync_next = false;  // this run's, and keys.ini's for the next start
++    int deadzone = 0;        // percent
++    int invert = 0;          // 0 no, 1 x, 2 y, 3 both
+     // the keys page: one row per button (label and its keys, in the order of keys.ini) and a message line (what the last change did)
+     struct KeyRow {
+         std::string label, keys;
+diff --git a/host/window.cpp b/host/window.cpp
+index d82a042..9763a13 100644
+--- a/host/window.cpp
++++ b/host/window.cpp
+@@ -152,6 +152,7 @@ bool g_block_input[2] = {};
+ int g_stick_step[2] = {};  // the left stick moving the highlight: -1 up, 1 down, 0 near the middle
+ // The inner resolution (PS2_SCALE): the one of this run, and the one keys.ini holds for the next start (the menu changes that one).
+ int g_scale_now = 1, g_scale_next = 1;
++bool g_vsync_now = false, g_vsync_next = false;  // vertical sync of this run (PS2_PRESENT_MODE fifo) and of the next start (keys.ini)
+ bool g_scale_locked = false;  // PS2_SCALE was set before the start: keys.ini does not count
+ // The filter of upscaled 2D art (PS2_SHARP_2D: 0 soft, 1 sharp, 2 sharpest), the same way: this run's and keys.ini's for the next start.
+ int g_sharp_now = 1, g_sharp_next = 1;
+@@ -795,10 +796,27 @@ void poll_port(int port) {
+         };
+         trigger(SDL_CONTROLLER_AXIS_TRIGGERLEFT, kL2, l2);
+         trigger(SDL_CONTROLLER_AXIS_TRIGGERRIGHT, kR2, r2);
+-        if (lx == 0x80) lx = axis(pad, SDL_CONTROLLER_AXIS_LEFTX);
+-        if (ly == 0x80) ly = axis(pad, SDL_CONTROLLER_AXIS_LEFTY);
+-        if (rx == 0x80) rx = axis(pad, SDL_CONTROLLER_AXIS_RIGHTX);
+-        if (ry == 0x80) ry = axis(pad, SDL_CONTROLLER_AXIS_RIGHTY);
++        // the sticks: the dead zone (keys.ini stick_deadzone, round: the stick's distance from the middle) and the right stick turned
++        // round (right_invert); the rest of the travel is spread over the whole range, so the edge is still the edge
++        const auto stick = [&](SDL_GameControllerAxis ax, SDL_GameControllerAxis ay, bool right, std::uint8_t &ox, std::uint8_t &oy) {
++            double x = SDL_GameControllerGetAxis(pad, ax) / 32767.0, y = SDL_GameControllerGetAxis(pad, ay) / 32767.0;
++            const double dz = g_keys.stick_deadzone / 100.0, len = std::sqrt(x * x + y * y);
++            if (dz > 0.0) {
++                if (len <= dz) x = y = 0.0;
++                else {
++                    const double k = std::min(1.0, (len - dz) / (1.0 - dz)) / len;
++                    x *= k;
++                    y *= k;
++                }
++            }
++            if (right && (g_keys.right_invert & 1)) x = -x;
++            if (right && (g_keys.right_invert & 2)) y = -y;
++            const auto byte = [](double v) { return static_cast<std::uint8_t>(std::clamp(static_cast<int>(std::lround(v * 127.5 + 127.5)), 0, 255)); };
++            if (ox == 0x80) ox = byte(x);
++            if (oy == 0x80) oy = byte(y);
++        };
++        stick(SDL_CONTROLLER_AXIS_LEFTX, SDL_CONTROLLER_AXIS_LEFTY, false, lx, ly);
++        stick(SDL_CONTROLLER_AXIS_RIGHTX, SDL_CONTROLLER_AXIS_RIGHTY, true, rx, ry);
+     }
+     if (g_menu.is_open()) g_block_input[port] = true;
+     if (g_block_input[port]) {
+@@ -904,8 +922,17 @@ void menu_paint(bool show_again = true) {
+         v.sharp_next = g_sharp_next;
+         v.sharp_locked = g_sharp_locked;
+         v.fullscreen = SDL_GetWindowFlags(g_window) & SDL_WINDOW_FULLSCREEN;
++        v.vsync_now = g_vsync_now;
++        v.vsync_next = g_vsync_next;
++        v.deadzone = g_keys.stick_deadzone;
++        v.invert = g_keys.right_invert;
+         if (g_menu.on_keys_page()) {
+-            for (int a = 0; a < keymap::kChangeableCount; ++a) v.key_rows.push_back({keymap::action_label(a), keymap::keys_text(g_keys, a)});
++            static const char *const kLabelsEs[keymap::kChangeableCount] = {
++                "Cruceta arriba", "Cruceta abajo", "Cruceta izquierda", "Cruceta derecha", "Stick izq. arriba", "Stick izq. abajo", "Stick izq. izquierda",
++                "Stick izq. derecha", "Stick der. arriba", "Stick der. abajo", "Stick der. izquierda", "Stick der. derecha", "X (Cruz)", "Círculo",
++                "Cuadrado", "Triángulo", "L1", "R1", "L2", "R2", "L3", "R3", "Start", "Select", "Rodar", "Furia (L3 + R3)"};
++            for (int a = 0; a < keymap::kChangeableCount; ++a)
++                v.key_rows.push_back({quickmenu::spanish() ? kLabelsEs[a] : keymap::action_label(a), keymap::keys_text(g_keys, a)});
+             v.key_note = g_key_note;
+         }
+         g_menu.draw(w, h, v, g_menu_picture);
+@@ -1102,6 +1129,21 @@ void menu_command(quickmenu::Command c, int step) {
+         std::fprintf(stderr, "[menu] 2D art %s for the next start (this run: %s)\n", keymap::sharp_2d_word(g_sharp_next), keymap::sharp_2d_word(g_sharp_now));
+         break;
+     case Command::fullscreen: toggle_fullscreen(); break;
++    case Command::vsync:
++        g_vsync_next = !g_vsync_next;
++        g_keys.vsync = g_vsync_next ? 1 : 0;
++        rewrite_keys_file([](const std::string &t) { return keymap::with_vsync(t, g_keys.vsync); }, "vertical sync");
++        set_notice(std::string(quickmenu::tr("Vertical sync: ", "Sincronización vertical: ")) + (g_vsync_next ? quickmenu::tr("on", "sí") : quickmenu::tr("off", "no")) +
++                   (g_vsync_next == g_vsync_now ? "" : quickmenu::tr(", used when the game starts the next time", ", al reiniciar el juego")));
++        break;
++    case Command::deadzone:
++        g_keys.stick_deadzone = std::clamp(g_keys.stick_deadzone + 5 * step, 0, 40);
++        rewrite_keys_file([](const std::string &t) { return keymap::with_stick_deadzone(t, g_keys.stick_deadzone); }, "stick dead zone");
++        break;
++    case Command::invert:
++        g_keys.right_invert = (g_keys.right_invert + step + 4) % 4;
++        rewrite_keys_file([](const std::string &t) { return keymap::with_right_invert(t, g_keys.right_invert); }, "right stick");
++        break;
+     case Command::change_keys: g_key_note.clear(); break;  // (the menu has switched to its keys page)
+     case Command::key_edit: g_key_note.clear(); break;     // (the highlighted line waits for a key now)
+     case Command::key_defaults: {
+@@ -1839,6 +1881,15 @@ bool open_window(bool fullscreen) {
+         ps2::os::set_env("PS2_SCALE", std::to_string(g_keys.scale));
+         std::fprintf(stderr, "[video] resolution %dx from %s (scale = %d)\n", g_keys.scale, g_keys_path.c_str(), g_keys.scale);
+     }
++    quickmenu::set_language(ps2::os::env("PS2_MENU_LANG"));
++    // vertical sync: PS2_PRESENT_MODE wins; else the 'vsync' line of keys.ini (on: the picture waits for the screen's refresh, fifo)
++    if (ps2::os::env("PS2_PRESENT_MODE").empty() && g_keys.vsync == 1) ps2::os::set_env("PS2_PRESENT_MODE", "fifo");
++    {
++        std::string mode = ps2::os::env("PS2_PRESENT_MODE");
++        for (char &ch : mode) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
++        g_vsync_now = mode == "fifo" || mode == "relaxed";
++        g_vsync_next = g_keys.vsync == 1 || (g_keys.vsync < 0 && g_vsync_now);
++    }
+     g_scale_now = std::clamp(std::atoi(ps2::os::env("PS2_SCALE").c_str()), 1, 4);
+     g_scale_next = g_scale_locked ? g_scale_now : (g_keys.scale >= 1 ? g_keys.scale : g_scale_now);
+     // the 2D art filter the same way: PS2_SHARP_2D, else the 'sharp_2d' line of keys.ini, else sharp (gpu.cpp reads it at its start)
+diff --git a/recomp/vurecomp_gen.cpp b/recomp/vurecomp_gen.cpp
+index ec6118c..aff8843 100644
+--- a/recomp/vurecomp_gen.cpp
++++ b/recomp/vurecomp_gen.cpp
+@@ -639,7 +639,7 @@ std::string generate(const Program &p, std::string &name) {
+                 else if (reg == def[(pc - 8u) & kMask]) replace_all(lcode, std::format("r.vi[{}]", reg), "bk");
+             }
+         }
+-        if (hi & 0x80000000u) body += std::format("r.i = {}u; ", lo);
++        if (hi & 0x80000000u) body += std::format("std::memcpy(&r.i, r.code + {}u, 4); ", pc);  // LOI: the game may rewrite it, read it now
+         else if (!l.supported) body += std::format("vu::interpret(1, {}u); return; ", pc);
+         else body += lcode;
+         if (keep_bk.count(pc)) body += "bk = next_bk; ";
+diff --git a/runtime/include/ps2/cpu.hpp b/runtime/include/ps2/cpu.hpp
+index 2823415..a37c9fb 100644
+--- a/runtime/include/ps2/cpu.hpp
++++ b/runtime/include/ps2/cpu.hpp
+@@ -48,6 +48,9 @@ struct Vu0Regs {
+     std::uint32_t clip{};
+     std::uint32_t cmsar0{};
+     std::uint32_t tpc{};
++    // The unit's micro memory, set by the runtime before a compiled program runs: a LOI immediate (the lower word of an instruction
++    // with the I bit) is read from here as the program runs, since games write new constants into their programs every frame.
++    const std::uint8_t *code = nullptr;
+ };
+ 
+ struct Cpu {
+diff --git a/runtime/include/ps2/system.hpp b/runtime/include/ps2/system.hpp
+index 88e7171..5a391e5 100644
+--- a/runtime/include/ps2/system.hpp
++++ b/runtime/include/ps2/system.hpp
+@@ -107,6 +107,7 @@ std::uint64_t hblank_cycles();
+ void set_budget(Cpu &c, std::int64_t cycles);
+ void schedule(int event, std::uint64_t at, std::function<void()> action);
+ std::uint64_t scheduled_at(int event);
++void unschedule(int event);
+ bool preempt(Cpu &c);
+ 
+ bool has_code(std::uint32_t pc);
+diff --git a/runtime/include/ps2/vu_ops.hpp b/runtime/include/ps2/vu_ops.hpp
+index 1026a6f..1e18f6b 100644
+--- a/runtime/include/ps2/vu_ops.hpp
++++ b/runtime/include/ps2/vu_ops.hpp
+@@ -555,7 +555,7 @@ inline std::uint64_t program_key(const std::uint8_t *code, const std::vector<std
+         std::memcpy(&lo, code + pc, 4);
+         std::memcpy(&hi, code + pc + 4, 4);
+         mix(pc);
+-        mix(lo);
++        mix(hi & 0x80000000u ? 0u : lo);  // a LOI immediate is data the game rewrites; compiled code reads it at run time
+         mix(hi);
+     }
+     return h;
+diff --git a/runtime/src/dmac.cpp b/runtime/src/dmac.cpp
+index d1ef745..d5a2ed7 100644
+--- a/runtime/src/dmac.cpp
++++ b/runtime/src/dmac.cpp
+@@ -14,6 +14,7 @@
+ #include "ps2/state.hpp"
+ 
+ #include <algorithm>
++#include <array>
+ #include <cstdio>
+ #include <cstdlib>
+ #include <cstring>
+@@ -83,8 +84,48 @@ std::uint8_t *target(std::uint32_t address) {
+     return g_ram + (address & (kRamSize - 16));
+ }
+ 
++// PS2_DMA_TIME=<EE cycles per VIF1 quadword>,<EE cycles per GIF quadword>: the GIF (PATH3) transfer stays busy (STR set, no end
++// interrupt) for the time the console would take for it: PATH3 only moves while VIF1's geometry ahead of it is done (VU1 and the
++// GS), so the VIF1 quadwords sent since the last GIF transfer ended count too, then its own quadwords. Here the data of both is
++// handed over at once, and a game that draws, waits for its textures' transfer to end and draws again (Crash Tag Team Racing's
++// title: 18 times the same scene in one frame, 2 million GIF quadwords a frame, more than the console's GIF can move) made the
++// PC draw them all. VIF1 itself still ends at once. Off by default (no variable or 0,0).
++std::uint32_t g_moved[10];
++std::uint64_t g_vif_ahead = 0;  // VIF1 quadwords since the last GIF transfer ended
++std::uint64_t g_gs_busy_until = 0;  // EE time when the queued GIF work is done
++bool g_pending[10];  // the data went through; STR and the end interrupt wait for the kEventDma0 + ch event
++struct DmaCosts { std::uint32_t vif1 = 0, gif = 0; };
++const DmaCosts &dma_costs() {
++    static const DmaCosts costs = [] {
++        DmaCosts c;
++        if (const char *v = std::getenv("PS2_DMA_TIME"); v && *v) {
++            c.vif1 = static_cast<std::uint32_t>(std::strtoul(v, nullptr, 10));
++            const char *comma = std::strchr(v, ',');
++            c.gif = comma ? static_cast<std::uint32_t>(std::strtoul(comma + 1, nullptr, 10)) : 0u;
++        }
++        return c;
++    }();
++    return costs;
++}
++bool dma_timed(int ch) { return ch == 2 && (dma_costs().vif1 || dma_costs().gif); }
++
++std::uint64_t g_total[10];
++
+ void deliver(int ch, std::uint32_t address, std::uint32_t qwc) {
+     if (!qwc) return;
++    g_moved[ch] += qwc;
++    g_total[ch] += qwc;
++    if (ch == 1) g_vif_ahead += qwc;
++    static const bool log = std::getenv("PS2_DMA_TIME_LOG") != nullptr;
++    if (log) {
++        static std::uint64_t last_frame = 0, last1 = 0, last2 = 0;
++        const std::uint64_t f = frame_count();
++        if (f >= last_frame + 60) {
++            std::fprintf(stderr, "[dma-time] frames %llu-%llu: VIF1 %llu qw/frame, GIF %llu qw/frame\n", (unsigned long long)last_frame, (unsigned long long)f,
++                         (unsigned long long)((g_total[1] - last1) / (f - last_frame)), (unsigned long long)((g_total[2] - last2) / (f - last_frame)));
++            last_frame = f; last1 = g_total[1]; last2 = g_total[2];
++        }
++    }
+     static std::vector<std::uint8_t> buffer;
+     const std::size_t bytes = static_cast<std::size_t>(qwc) * 16;
+     const std::size_t room = (address & 0x80000000u) ? kScratchpadSize - (address & (kScratchpadSize - 1)) : kRamSize - (address & (kRamSize - 16));
+@@ -128,8 +169,44 @@ void pause(int ch, bool end) {
+ 
+ void run_chain(int ch);
+ 
++void complete(int ch);
++
++}  // namespace
++
++// A transfer the game stopped meanwhile (STR cleared) ends quietly.
++void deferred_end(int ch) {
++    // A chain runs to its end at once unless it pauses (a stall), so STR set on a channel that is not paused is a held transfer,
++    // also right after a state load restored the event but not the flag.
++    if (ch >= 0 && ch < 10 && (g_pending[ch] || ((g_ch[ch].chcr & 0x100u) && !g_ch[ch].paused))) complete(ch);
++}
++
++namespace {
++
+ void finish(int ch) {
++    if (dma_timed(ch) && g_moved[ch]) {
++        // The work queues up: a transfer started again before the last one's time was over (its data went through, so it ended
++        // early) still has that time ahead of it. At most one 60 Hz frame of EE time ahead of now.
++        const std::uint64_t t = now();
++        const std::uint64_t work = g_vif_ahead * dma_costs().vif1 + static_cast<std::uint64_t>(g_moved[ch]) * dma_costs().gif;
++        g_gs_busy_until = std::min<std::uint64_t>(std::max(g_gs_busy_until, t) + work, t + 294912000u / 60u);
++        // and never past the coming vertical blank: a frame that draws once (a race) must not lose its flip to this wait
++        if (const std::uint64_t blank = scheduled_at(hw::kEventVblank); blank != UINT64_MAX && blank > t) g_gs_busy_until = std::min(g_gs_busy_until, blank);
++        g_moved[ch] = 0;
++        g_vif_ahead = 0;
++        g_pending[ch] = true;
++        schedule(hw::kEventDma0 + ch, g_gs_busy_until, [ch] { deferred_end(ch); });
++        return;
++    }
++    g_moved[ch] = 0;
++    complete(ch);
++}
++
++void complete(int ch) {
+     Channel &c = g_ch[ch];
++    if (g_pending[ch]) {
++        g_pending[ch] = false;
++        unschedule(hw::kEventDma0 + ch);  // ended early (started again): its event must not end the next transfer
++    }
+     static const bool trace = std::getenv("PS2_TRACE_DMA") != nullptr;
+     if (trace && ch <= 4) std::fprintf(stderr, "[dma] ch%d done chcr 0x%08X tadr 0x%08X madr 0x%08X\n", ch, c.chcr, c.tadr, c.madr);
+     c.chcr &= ~0x100u;
+@@ -355,6 +432,7 @@ void run_chain(int ch) {
+ void start(int ch) {
+     Channel &c = g_ch[ch];
+     c.paused = false;
++    g_moved[ch] = 0;
+     c.tag_end = c.qwc && chain_ends_after_current(c);
+     ++g_starts[ch];
+     static const bool trace = std::getenv("PS2_TRACE_DMA") != nullptr;
+@@ -541,6 +619,9 @@ void write(std::uint32_t a, std::uint32_t v) {
+         Channel &c = g_ch[ch];
+         switch (a - kBase[ch]) {
+         case 0x00: {
++            // A transfer held busy by PS2_DMA_TIME that the game starts again: its data went through long ago, so it ends now (with
++            // its interrupt) and the new one begins. Crash Tag Team Racing sends the next texture without looking at STR.
++            if (g_pending[ch] && (c.chcr & 0x100u) && (v & 0x100u)) complete(ch);
+             const bool was = c.chcr & 0x100u;
+             c.chcr = v;
+             if (!(v & 0x100u)) {
+@@ -582,6 +663,8 @@ void state(ps2::state::Stream &s) {
+     s.pod(g_stadr);
+     s.pod(g_enable);
+     if (s.loading()) {
++        // a transfer held busy when the state was saved: its event comes back with the state's events
++        for (int ch = 0; ch < 10; ++ch) g_pending[ch] = (g_ch[ch].chcr & 0x100u) && scheduled_at(hw::kEventDma0 + ch) != UINT64_MAX;
+         const Channel &v = g_ch[1];
+         g_mfifo_waiting = mfifo_vif1() && (v.chcr & 0x100u) && !v.paused && !v.qwc && ring(v.tadr) == ring(g_ch[8].madr);
+     }
+diff --git a/runtime/src/dmac.hpp b/runtime/src/dmac.hpp
+index 417554b..0503efc 100644
+--- a/runtime/src/dmac.hpp
++++ b/runtime/src/dmac.hpp
+@@ -19,6 +19,8 @@ void enable_write(std::uint32_t v);
+ std::uint32_t read(std::uint32_t a);
+ void write(std::uint32_t a, std::uint32_t v);
+ void resume(int ch);
++// The end of a transfer held busy by PS2_DMA_TIME (the hw::kEventDma0 + ch event; also the action of that event in a loaded state).
++void deferred_end(int ch);
+ bool ipu_pull(std::uint8_t *qword);
+ bool ipu_push(const std::uint8_t *qword);
+ std::size_t ipu_push_many(const std::uint8_t *qwords, std::size_t count);
+diff --git a/runtime/src/gs/gif.cpp b/runtime/src/gs/gif.cpp
+index 7e54d43..33620df 100644
+--- a/runtime/src/gs/gif.cpp
++++ b/runtime/src/gs/gif.cpp
+@@ -236,7 +236,16 @@ void out(int path, const std::uint8_t *data, std::uint32_t qwc) {
+         return;
+     }
+     if (gs::queue::role() != gs::queue::Role::Vu) scan(g_scan[path], data, qwc);
+-    gs::queue::post(gs::queue::kGif, static_cast<std::uint32_t>(path), qwc, data, qwc * 16);
++    // One message must fit the ring (32 MiB, and a message that wraps needs room for its padding too). PATH3 data held while the
++    // mask is up can grow far past that (Crash Tag Team Racing's intro film), and a message that can never fit waited forever: the
++    // vector thread stood in post, the emulation behind it. The GIF walks a path as a stream, so cutting it anywhere is fine.
++    constexpr std::uint32_t kMaxQwc = 1u << 16;  // 1 MiB per message
++    while (qwc) {
++        const std::uint32_t n = std::min(qwc, kMaxQwc);
++        gs::queue::post(gs::queue::kGif, static_cast<std::uint32_t>(path), n, data, n * 16);
++        data += static_cast<std::size_t>(n) * 16;
++        qwc -= n;
++    }
+ }
+ 
+ // How many of these qwords belong to the packet under way; mid_packet is left set when
+diff --git a/runtime/src/gs/gpu/gpu.cpp b/runtime/src/gs/gpu/gpu.cpp
+index 0ffb15f..91cacb3 100644
+--- a/runtime/src/gs/gpu/gpu.cpp
++++ b/runtime/src/gs/gpu/gpu.cpp
+@@ -2456,7 +2456,9 @@ static bool open_backend([[maybe_unused]] std::uint32_t backends, const char *na
+     };
+     bool adapter_done = false;
+     WGPURequestAdapterOptions options = WGPU_REQUEST_ADAPTER_OPTIONS_INIT;
+-    options.powerPreference = std::getenv("PS2_GPU_LOW_POWER") ? WGPUPowerPreference_LowPower : WGPUPowerPreference_HighPerformance;
++    // PS2_GPU_LOW_POWER set (and not "0"): the power-saving graphics chip (port.sh's test runs; PS2_GPU_LOW_POWER=0 asks for the fast one there)
++    const char *low_power = std::getenv("PS2_GPU_LOW_POWER");
++    options.powerPreference = low_power && *low_power && std::strcmp(low_power, "0") != 0 ? WGPUPowerPreference_LowPower : WGPUPowerPreference_HighPerformance;
+     options.forceFallbackAdapter = std::getenv("PS2_GPU_FALLBACK") != nullptr;
+     WGPURequestAdapterCallbackInfo acb = WGPU_REQUEST_ADAPTER_CALLBACK_INFO_INIT;
+     acb.mode = WGPUCallbackMode_AllowSpontaneous;
+diff --git a/runtime/src/gs/queue.cpp b/runtime/src/gs/queue.cpp
+index eb04879..c556631 100644
+--- a/runtime/src/gs/queue.cpp
++++ b/runtime/src/gs/queue.cpp
+@@ -125,7 +125,13 @@ void Ring::post(Type type, std::uint32_t arg0, std::uint32_t arg1, const void *d
+         producer_waiting_.store(1);
+         if (head + pad + need - tail_.load() > capacity_) {
+             const std::uint64_t t0 = qs_on() ? now_us() : 0;
++#if defined(_WIN32)
++            // A wake-up from pop() can be missed here on Windows (Crash Tag Team Racing stood still for good after its intro film, the
++            // ring drained and the producer asleep). Never sleep without a limit: look again every 2 ms.
++            WaitOnAddress(&freed_, const_cast<std::uint32_t *>(&seen), sizeof seen, 2);
++#else
+             wait(freed_, seen);
++#endif
+             if (qs_on()) { QStats &q = g_qs[this == &g_render ? 0 : 1]; q.full_waits.fetch_add(1); q.full_us.fetch_add(now_us() - t0); }
+         }
+     }
+diff --git a/runtime/src/hw.cpp b/runtime/src/hw.cpp
+index f91c5f7..503cd0b 100644
+--- a/runtime/src/hw.cpp
++++ b/runtime/src/hw.cpp
+@@ -393,6 +393,7 @@ namespace ps2::hw {
+ std::function<void()> event_action(int id, std::uint64_t at) {
+     if (id == kEventVblankEnd) return [] { intc_raise(3); };
+     if (id == kEventGsFinish) return gs::raise_finish;
++    if (id >= kEventDma0 && id < kEventDma0 + 10) return [ch = id - kEventDma0] { dmac::deferred_end(ch); };
+     if (id >= kEventTimer0 && id <= kEventTimer3) return [n = id - kEventTimer0, at] { timer_event(n, at); };
+     return [] {};
+ }
+diff --git a/runtime/src/kernel.cpp b/runtime/src/kernel.cpp
+index 6561c4d..4cf51d5 100644
+--- a/runtime/src/kernel.cpp
++++ b/runtime/src/kernel.cpp
+@@ -23,7 +23,7 @@ namespace ps2::kernel {
+ namespace {
+ 
+ enum Status { kRun = 1, kReady = 2, kWait = 4, kSuspend = 8, kWaitSuspend = 12, kDormant = 16 };
+-enum WaitType { kWaitNone, kWaitSleep, kWaitSema };
++enum WaitType { kWaitNone, kWaitSleep, kWaitSema, kWaitVblank };
+ 
+ constexpr std::uint32_t kKernelStackTop = 0x00080000u;
+ constexpr std::uint32_t kSyscallTable = 0x00001800u;
+@@ -493,6 +493,8 @@ void service(Cpu &c) {
+ }
+ 
+ void on_vblank_start() {
++    for (auto &[id, t] : g_threads)
++        if ((t.status == kWait || t.status == kWaitSuspend) && t.wait == kWaitVblank) release(t, t.wait_id);
+     if (!g_vsync_flag) return;
+     st32(g_vsync_flag, 1);
+     if (g_vsync_data) st64(g_vsync_data, hw::gs_csr());
+@@ -617,6 +619,19 @@ void handle_syscall(Cpu &c, std::uint32_t pc) {
+                 if (x.status == kReady && x.priority == prio && (!first || x.order < first->order)) first = &x;
+             if (first) first->order = ++g_order;
+         }
++        // PS2_ROTATE_VSYNC=1: a thread that yields with no other thread of its priority ready waits for the next vertical blank.
++        // On the console such a loop (draw, yield, draw again: Crash Tag Team Racing's title and menus) is held to about one
++        // picture per frame by the time the graphics chip takes; here drawing costs no game time, so the loop drew the same
++        // scene 18 times per frame and the PC drew all of them.
++        static const bool rotate_vsync = [] { const char *v = std::getenv("PS2_ROTATE_VSYNC"); return v && *v && *v != '0'; }();
++        bool alone = rotate_vsync && n == 0x2B && !g_in_handler && t && t->priority == prio;
++        if (alone)
++            for (auto &[id, x] : g_threads)
++                if (&x != t && x.status == kReady && x.priority == prio) { alone = false; break; }
++        if (alone) {
++            block_current(c, kWaitVblank, prio);  // returns the priority, as the call does, when the blank releases it
++            break;
++        }
+         if (n == 0x2B) reschedule(c);
+         else g_reschedule = true;
+         break;
+diff --git a/runtime/src/system.cpp b/runtime/src/system.cpp
+index 199204d..e11d1fa 100644
+--- a/runtime/src/system.cpp
++++ b/runtime/src/system.cpp
+@@ -457,6 +457,10 @@ void schedule(int event, std::uint64_t at, std::function<void()> action) {
+     g_events.push_back({event, at, std::move(action)});
+ }
+ 
++void unschedule(int event) {
++    g_events.erase(std::remove_if(g_events.begin(), g_events.end(), [&](const Event &e) { return e.id == event; }), g_events.end());
++}
++
+ std::uint64_t scheduled_at(int event) {
+     for (const Event &e : g_events)
+         if (e.id == event) return e.at;
+diff --git a/runtime/src/vu_micro.cpp b/runtime/src/vu_micro.cpp
+index 64a2268..45bdf1f 100644
+--- a/runtime/src/vu_micro.cpp
++++ b/runtime/src/vu_micro.cpp
+@@ -843,7 +843,8 @@ bool run_compiled_vu0(std::uint32_t address) {
+     static const bool interpret_only = std::getenv("PS2_VU0_INTERPRET") != nullptr;
+     if (!fn || interpret_only) return false;
+     static const bool verify = std::getenv("PS2_VU0_VERIFY") != nullptr;
+-    if (!verify) { fn(g_cpu.vu0, g_vu0_mem); return true; }
++    if (!verify) { g_cpu.vu0.code = g_vu0_code; fn(g_cpu.vu0, g_vu0_mem); return true; }
++    g_cpu.vu0.code = g_vu0_code;
+     // Both executions start from identical state. Retain the exact result on a
+     // mismatch and blacklist the program, so verification never installs bad state.
+     const Vu0Regs before = g_cpu.vu0;
+@@ -892,10 +893,18 @@ struct EntryCache {
+     std::uint32_t next = 0;
+ };
+ 
++// Instructions are compared without the LOI immediates (lower word of an instruction with the I bit), which games rewrite every frame.
+ bool candidate_matches(const Candidate &c) {
+     const std::uint8_t *code = c.code.data();
+     for (std::size_t i = 0; i < c.runs.size(); i += 2) {
+-        if (std::memcmp(g_vu1_code + c.runs[i], code, c.runs[i + 1]) != 0) return false;
++        const std::uint8_t *live = g_vu1_code + c.runs[i];
++        for (std::uint32_t at = 0; at < c.runs[i + 1]; at += 8) {
++            std::uint32_t hi, want_hi;
++            std::memcpy(&hi, live + at + 4, 4);
++            std::memcpy(&want_hi, code + at + 4, 4);
++            if (hi != want_hi) return false;
++            if (!(hi & 0x80000000u) && std::memcmp(live + at, code + at, 4) != 0) return false;
++        }
+         code += c.runs[i + 1];
+     }
+     return true;
+@@ -1025,7 +1034,7 @@ void check_jit(ProgramFn compiled, ProgramFn jit) {
+     jit::g_dry = true;
+     jit::g_escape = -1;
+     jit::g_kicks = &jit_kicks;
+-    jit(g_vu1, g_vu1_mem);
++    jit((g_vu1.code = g_vu1_code, g_vu1), g_vu1_mem);
+     jit::g_dry = false;
+     const std::int64_t jit_escape = jit::g_escape;
+     const Vu0Regs after = g_vu1;
+@@ -1035,7 +1044,7 @@ void check_jit(ProgramFn compiled, ProgramFn jit) {
+     std::int64_t escape = -1;
+     g_kick_log = &kicks;
+     g_capture = &escape;
+-    compiled(g_vu1, g_vu1_mem);
++    compiled((g_vu1.code = g_vu1_code, g_vu1), g_vu1_mem);
+     g_capture = nullptr;
+     g_kick_log = nullptr;
+     ++calls;
+@@ -1088,7 +1097,7 @@ void interpret(int unit, std::uint32_t pc) {
+             const EntryCache &e = g_entries[(pc & 16383u) >> 3];
+             if (e.generation == g_generation[1] && e.function) {
+                 g_trace_vu1_pc = pc;
+-                e.function(g_vu1, g_vu1_mem);
++                e.function((g_vu1.code = g_vu1_code, g_vu1), g_vu1_mem);
+             } else {
+                 run_entry(1, pc);
+             }
+@@ -1190,7 +1199,7 @@ void run_entry(int unit, std::uint32_t pc) {
+                 std::int64_t escape = -1;
+                 const std::uint64_t key = program_key(g_vu1_code, reachable(g_vu1_code, 16383u, pc & 16383u), pc & 16383u);
+                 g_capture = &escape;
+-                fn(g_vu1, g_vu1_mem);
++                fn((g_vu1.code = g_vu1_code, g_vu1), g_vu1_mem);
+                 g_capture = nullptr;
+                 const Vu0Regs after = g_vu1;
+                 std::memcpy(run_mem, g_vu1_mem, sizeof run_mem);
+@@ -1230,12 +1239,12 @@ void run_entry(int unit, std::uint32_t pc) {
+             static const bool timed = std::getenv("PS2_VU_TIME") != nullptr;
+             if (timed) {
+                 const std::uint64_t t0 = time_stamp();
+-                fn(g_vu1, g_vu1_mem);
++                fn((g_vu1.code = g_vu1_code, g_vu1), g_vu1_mem);
+                 time_note(g_entries[(pc & 16383u) >> 3].key, time_stamp() - t0);
+                 return;
+             }
+             if (jit && jit != fn && ++sampled % 32 == 0) check_jit(fn, jit);
+-            else fn(g_vu1, g_vu1_mem);
++            else fn((g_vu1.code = g_vu1_code, g_vu1), g_vu1_mem);
+             return;
+         }
+     }
+diff --git a/scripts/port.sh b/scripts/port.sh
+index 5e5e91c..b504c07 100644
+--- a/scripts/port.sh
++++ b/scripts/port.sh
+@@ -210,7 +210,7 @@ if [ "$explore" = 1 ]; then
+     build_native
+     rm -f "$game/misses.txt" "$game/explore.ps2" "$game/explore_ram.bin"
+     code=0
+-    PS2_DUMP="$game/explore_ram.bin" PS2_GPU_LOW_POWER=1 PS2_VU0_RECORD="$game/vu0" PS2_VU_RECORD="$game/vu1" "$native/ps2run" "$elf" --disc "$iso" --misses "$game/misses.txt" --memcard "$game/explore.ps2" \
++    PS2_DUMP="$game/explore_ram.bin" PS2_GPU_LOW_POWER="${PS2_GPU_LOW_POWER:-1}" PS2_VU0_RECORD="$game/vu0" PS2_VU_RECORD="$game/vu1" "$native/ps2run" "$elf" --disc "$iso" --misses "$game/misses.txt" --memcard "$game/explore.ps2" \
+       "${wide[@]}" "${patches[@]}" --frames "$frames" "${presses[@]}" --frames-dir "$game/shots" --frame-every 300 > "$game/explore.log" 2>&1 || code=$?
+     [ "$code" = 0 ] || echo "[port] ps2run exited with code $code" | tee -a "$game/explore.log"
+     captured=0

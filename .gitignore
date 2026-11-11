@@ -1,0 +1,4 @@
+# what the installer makes on your PC: the converter, its tools and your converted games (they contain the game: never upload them)
+engine/
+*.iso
+*.log

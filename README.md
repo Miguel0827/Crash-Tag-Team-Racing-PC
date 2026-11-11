@@ -1,5 +1,10 @@
 # Crash Tag Team Racing PC
 
+> [!WARNING]
+> **`multiplayer` branch: unfinished work in progress.** It may not work and can change at any time. Please do not report problems from this branch. To play, use the latest [official release](https://github.com/Miguel0827/Crash-Tag-Team-Racing-PC/releases/latest).
+>
+> **Rama `multiplayer`: en desarrollo y sin terminar.** Puede no funcionar y cambiar en cualquier momento. No reportes errores de esta rama. Para jugar, usa la última [versión oficial](https://github.com/Miguel0827/Crash-Tag-Team-Racing-PC/releases/latest).
+
 **By NyxBorn**
 
 <p>

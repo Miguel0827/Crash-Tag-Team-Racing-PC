@@ -99,3 +99,19 @@ Todo queda en esta carpeta: el instalador crea **`engine`** con el convertidor, 
 No compartas ISOs ni el juego convertido: contienen el juego, que es de sus dueños.
 
 Solo se aceptan reportes de errores de las **versiones oficiales** (página de [Releases](https://github.com/Miguel0827/Crash-Tag-Team-Racing-PC/releases) y RecompLauncher). Las demás ramas, como `multiplayer`, están en desarrollo y sin terminar: no reportes errores de ellas.
+
+---
+
+<div align="center">
+
+### Support my work · Apoya mi trabajo 💜
+
+This port is free and always will be. If you want to support my work as a developer, you can sponsor me on GitHub.
+It's completely optional: it doesn't unlock anything and it doesn't pay for the game. You always need your own disc.
+
+*Este port es gratis y siempre lo será. Si quieres apoyar mi trabajo como desarrollador, puedes patrocinarme en GitHub.
+Es totalmente opcional: no desbloquea nada y no paga el juego. Siempre necesitas tu propio disco.*
+
+<a href="https://github.com/sponsors/Miguel0827"><img src="https://img.shields.io/badge/Sponsor-NyxBorn-a855f7?style=for-the-badge&logo=githubsponsors&logoColor=white" alt="Sponsor NyxBorn on GitHub"></a>
+
+</div>

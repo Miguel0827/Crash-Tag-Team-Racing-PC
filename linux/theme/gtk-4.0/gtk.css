@@ -1,0 +1,33 @@
+/* Crash Tag Team Racing PC - the colours of the launcher for the Linux windows (zenity, GTK 4 / libadwaita).
+   ui.sh points XDG_CONFIG_HOME here only for these windows, so nothing else on the system changes. */
+@define-color accent_color #C084FC;
+@define-color accent_bg_color #A855F7;
+@define-color accent_fg_color #FFFFFF;
+@define-color window_bg_color #0D1117;
+@define-color window_fg_color #E9D5FF;
+@define-color view_bg_color #161B22;
+@define-color view_fg_color #E9D5FF;
+@define-color dialog_bg_color #0D1117;
+@define-color dialog_fg_color #E9D5FF;
+@define-color headerbar_bg_color #2E1065;
+@define-color headerbar_fg_color #FFFFFF;
+@define-color headerbar_backdrop_color #2E1065;
+@define-color popover_bg_color #161B22;
+@define-color popover_fg_color #E9D5FF;
+@define-color card_bg_color #161B22;
+@define-color card_fg_color #E9D5FF;
+@define-color borders #30363D;
+
+window, dialog, .background { background-color: #0D1117; color: #E9D5FF; }
+headerbar, .titlebar { background: linear-gradient(to right, #2E1065, #A855F7); color: #FFFFFF; box-shadow: none; }
+headerbar .title, .titlebar .title { font-weight: 800; letter-spacing: 1px; }
+label { color: #E9D5FF; }
+button { border-radius: 0; background-color: #161B22; color: #E9D5FF; border: 1px solid #30363D; }
+button:hover { background-color: #30363D; }
+button.suggested-action, button.default, .dialog-action-area button:first-child { background-color: #A855F7; color: #FFFFFF; border: none; font-weight: 800; }
+button.suggested-action:hover, button.default:hover { background-color: #9333EA; }
+dropdown > button, combobox button, entry { background-color: #161B22; color: #FFFFFF; border: 1px solid #30363D; border-radius: 0; }
+progressbar trough { background-color: #30363D; border-radius: 0; min-height: 14px; }
+progressbar progress { background: linear-gradient(to right, #2E1065, #A855F7); border-radius: 0; min-height: 14px; }
+popover contents, popover arrow { background-color: #161B22; color: #E9D5FF; }
+row:selected, listview row:selected { background-color: #A855F7; color: #FFFFFF; }

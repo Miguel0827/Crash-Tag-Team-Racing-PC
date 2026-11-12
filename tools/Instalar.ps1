@@ -31,11 +31,22 @@ $Lock = Join-Path $Root 'install.lock'
 Set-Content -Path $Lock -Value $PID -Encoding ascii
 
 # ---------------------------------------------------------------- 1. the converter
-if (-not (Test-Path (Join-Path $Root 'scripts\port.sh'))) {   # an empty engine folder: the converter is fetched into it
+# The marker names the converter version and this package's fixes. Fixes from an older package (an update extracted over it)
+# mean the converter's original files are fetched again over the old ones and the new fixes applied to them.
+$PatchId = "$Commit " + (Get-FileHash $Patch -Algorithm SHA256).Hash.Substring(0, 16)
+$applied = if (Test-Path $Marker) { ((Get-Content $Marker -Raw) -as [string]).Trim() } else { '' }
+$stale = [bool]$applied -and $applied -ne $PatchId
+if ($stale -or -not (Test-Path (Join-Path $Root 'scripts\port.sh'))) {   # an empty engine folder, or older fixes to replace
     Step "Descargando ps2-native-recomp ($($Commit.Substring(0, 12)))"
     $tmp = Join-Path $env:TEMP "cttr-pc-$([guid]::NewGuid().ToString('N'))"
     New-Item -ItemType Directory -Force $tmp | Out-Null
-    Invoke-WebRequest -UseBasicParsing "https://github.com/exoteric33/ps2-native-recomp/archive/$Commit.zip" -OutFile "$tmp\src.zip"
+    # this project's own copy (fork) first, the original repository if the copy cannot be reached
+    $got = $false
+    foreach ($owner in @('Miguel0827', 'exoteric33')) {
+        try { Invoke-WebRequest -UseBasicParsing "https://github.com/$owner/ps2-native-recomp/archive/$Commit.zip" -OutFile "$tmp\src.zip"; $got = $true; break }
+        catch { Write-Host "no se pudo descargar de $owner, probando el otro repositorio..." }
+    }
+    if (-not $got) { throw 'No se pudo descargar ps2-native-recomp (¿sin internet?).' }
     Expand-Archive "$tmp\src.zip" "$tmp\x" -Force
     New-Item -ItemType Directory -Force $Root | Out-Null
     Copy-Item "$tmp\x\ps2-native-recomp-$Commit\*" $Root -Recurse -Force
@@ -55,11 +66,11 @@ Set-Location $Root
 $bash = Join-Path $Root 'tools\portable\mingit\usr\bin\bash.exe'
 $git  = (Get-ChildItem (Join-Path $Root 'tools\portable\mingit') -Recurse -Filter git.exe | Select-Object -First 1).FullName
 
-if (-not (Test-Path $Marker)) {
+if ($stale -or -not (Test-Path $Marker)) {
     Step 'Aplicando los arreglos de Crash Tag Team Racing PC al convertidor'
     Run $git apply --ignore-whitespace -p1 $Patch
     if ($LASTEXITCODE -ne 0) { throw 'No se pudieron aplicar los arreglos (¿otra versión de ps2-native-recomp?)' }
-    Set-Content -Path $Marker -Value $Commit -Encoding ascii
+    Set-Content -Path $Marker -Value $PatchId -Encoding ascii
 }
 
 Step 'Compilando el convertidor (setup.sh)'

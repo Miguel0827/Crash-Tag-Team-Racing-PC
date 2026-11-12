@@ -1,7 +1,8 @@
 ﻿# Crash Tag Team Racing PC - launcher (Windows PowerShell 5.1, WinForms). By NyxBorn.
 # Imports the player's own disc image (tools\Instalar.ps1 builds the port) and starts the game with the chosen settings.
 # Per game: <Root>\games\<name>\keys.ini (read by ps2run itself) and region.json (written by the installer).
-param([string]$Root = '')
+#   -Play: starts the game straight away with the saved settings (the game .exe); the settings window only when nothing is installed
+param([string]$Root = '', [switch]$Play)
 $ErrorActionPreference = 'Stop'
 # The console that runs this script is hidden here (started hidden, Windows would hide the launcher's window too).
 Add-Type -Namespace Native -Name Con -MemberDefinition '[DllImport("kernel32.dll")] public static extern System.IntPtr GetConsoleWindow(); [DllImport("user32.dll")] public static extern bool ShowWindow(System.IntPtr h, int c);'
@@ -19,6 +20,8 @@ if (-not $Root) {
     if ($short -and $short -notmatch ' ') { $Root = $short }
 }
 $CfgFile = Join-Path $Root 'cttr-launcher.json'
+$GameExe = Join-Path (Split-Path -Parent $Here) 'Crash Tag Team Racing PC.exe'          # the game's program, once installed
+$ShortcutFile = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Crash Tag Team Racing.lnk'
 
 # ---------------------------------------------------------------- texts
 $Texts = @{
@@ -83,6 +86,25 @@ No: viene rimosso tutto, anche i salvataggi."; err="Impossibile avviare l'instal
 Sim: o jogo convertido é apagado e seus saves ficam guardados.
 Não: tudo é apagado, inclusive os saves.'; err='Não foi possível iniciar a instalação:'; invs=@('Não','Horizontal','Vertical','Ambos') }
 }
+# the shortcut button at the end of an installation, and the question before importing a disc
+$Extra = @{
+ es = @{ sc='Crear acceso directo en el escritorio'; scdone='Acceso directo creado'; owntitle='Recuerda'
+         own="Necesitas tu propio disco original del juego."; ok='Entendido'; no='Cancelar' }
+ en = @{ sc='Create a desktop shortcut'; scdone='Shortcut created'; owntitle='Remember'
+         own="You need your own original disc of the game."; ok='Got it'; no='Cancel' }
+ fr = @{ sc='Créer un raccourci sur le bureau'; scdone='Raccourci créé'; owntitle='Rappel'
+         own="Il vous faut votre propre disque original du jeu."; ok='Compris'; no='Annuler' }
+ de = @{ sc='Desktop-Verknüpfung erstellen'; scdone='Verknüpfung erstellt'; owntitle='Denk daran'
+         own="Du brauchst deine eigene Original-Disc des Spiels."; ok='Verstanden'; no='Abbrechen' }
+ it = @{ sc='Crea un collegamento sul desktop'; scdone='Collegamento creato'; owntitle='Ricorda'
+         own="Ti serve il tuo disco originale del gioco."; ok='Ho capito'; no='Annulla' }
+ pt = @{ sc='Criar atalho na área de trabalho'; scdone='Atalho criado'; owntitle='Lembre-se'
+         own="Você precisa do seu próprio disco original do jogo."; ok='Entendi'; no='Cancelar' }
+}
+# colours of NyxBorn's GitHub profile: GitHub's dark background, the purple gradient and its lilac accents
+function Rgb([string]$hex) { [Drawing.Color]::FromArgb([Convert]::ToInt32($hex.Substring(0, 2), 16), [Convert]::ToInt32($hex.Substring(2, 2), 16), [Convert]::ToInt32($hex.Substring(4, 2), 16)) }
+$Theme = @{ bg = (Rgb '0D1117'); panel = (Rgb '161B22'); line = (Rgb '30363D'); deep = (Rgb '2E1065'); purple = (Rgb 'A855F7')
+            hover = (Rgb '9333EA'); lilac = (Rgb 'C084FC'); pale = (Rgb 'E9D5FF'); muted = (Rgb '8B949E'); red = (Rgb 'F87171') }
 $UiLangs   = @(@('es','Español'), @('en','English'), @('fr','Français'), @('de','Deutsch'), @('it','Italiano'), @('pt','Português'))
 $LangNames = @{ 1='English'; 2='Français'; 3='Español'; 4='Deutsch'; 5='Italiano'; 6='Nederlands' }   # the PS2's system language numbers
 $Looks     = @(@('sharp_edges','Sharp + smooth edges'), @('sharp','Sharp'), @('crisp_edges','Crisp + smooth edges'), @('crisp','Crisp'), @('soft_edges','Soft + smooth edges'), @('soft','Soft'))
@@ -122,22 +144,174 @@ $cfg = [ordered]@{ ui = 'es'; version = ''; game = 3; api = 'vulkan'; reshade = 
 if (Test-Path $CfgFile) { try { $j = Get-Content $CfgFile -Raw | ConvertFrom-Json; foreach ($p in $j.PSObject.Properties) { $cfg[$p.Name] = $p.Value } } catch {} }
 $Games = Get-Games
 
+# Starts game $g with the saved settings ($cfg and its keys.ini): the Play button after saving them, and -Play on its own
+function Start-Game($g) {
+    $gameDir = Join-Path $Root "games\$($g.name)"
+    Set-IniLines (Join-Path $gameDir 'keys.ini') @{ right_invert = 'x' }   # the right stick's left-right is the wrong way round in this game without it
+    # the patches of this run: wide screen always (it is in the converted program), the others as chosen and when the disc has them
+    $sets = Join-Path $gameDir 'patchsets'
+    $parts = @('ws.txt'); if ($cfg.fps) { $parts += 'fps.txt' }; if ($cfg.psp) { $parts += 'psp.txt' }
+    $text = ($parts | ForEach-Object { $f = Join-Path $sets $_; if (Test-Path $f) { [IO.File]::ReadAllText($f).TrimEnd() } } | Where-Object { $_ }) -join "`n"
+    [IO.File]::WriteAllText((Join-Path $gameDir 'patches_run.txt'), $text + "`n", (New-Object Text.UTF8Encoding $false))
+    $elf = "games/$($g.name)/patched/$($g.elf)"; if (-not (Test-Path (Join-Path $Root $elf))) { $elf = "games/$($g.name)/disc/$($g.elf)" }
+    $argv = @($elf, '--disc', "games/$($g.name)/disc.iso", '--window', '--game-dir', "games/$($g.name)", '--memcard', "games/$($g.name)/memcard.ps2", '--patches', "games/$($g.name)/patches_run.txt")
+    if ($g.widescreen) { $argv += '--widescreen' }
+    if ($cfg.full) { $argv += '--fullscreen' }
+    $psi = New-Object Diagnostics.ProcessStartInfo
+    $psi.FileName = Join-Path $Root "build\native-$($g.name)\ps2run.exe"; $psi.WorkingDirectory = $Root; $psi.UseShellExecute = $false
+    $psi.Arguments = ($argv | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } }) -join ' '
+    $ev = $psi.EnvironmentVariables
+    $ev['PS2_LANGUAGE'] = [string]$cfg.game
+    $ev['PS2_MENU_LANG'] = $cfg.ui
+    $ev['PS2_GPU_BACKEND'] = $cfg.api
+    if ($cfg.api -ne 'vulkan' -or -not $cfg.reshade) { $ev['DISABLE_VK_LAYER_reshade_1'] = '1' }
+    $ev['PS2_DMA_TIME'] = '120,16'   # the title and menus: GIF transfers take the console's time (always on)
+    $icon = Join-Path $Here 'starter\icon.bmp'; if (Test-Path $icon) { $ev['PS2_WINDOW_ICON'] = $icon }   # the Wumpa on the game's window
+    [void][Diagnostics.Process]::Start($psi)
+}
+# "Partidas" next to the programs: a link per installed version to the folder that holds its saves (memory card, quick saves, backups),
+# and a note on which file is which. A link (junction) needs no administrator; deleting it leaves the saves where they are.
+function Update-SavesFolder {
+    try {
+        $dir = Join-Path (Split-Path -Parent $Here) 'Partidas'
+        New-Item -ItemType Directory -Force $dir | Out-Null
+        foreach ($g in $Games) {
+            $link = Join-Path $dir $(if ($g.region -eq 'eu') { 'Europa' } else { 'USA' })
+            $target = (Get-Item (Join-Path $Root "games\$($g.name)")).FullName
+            if (-not (Test-Path $link)) { [void](cmd /c mklink /J "`"$link`"" "`"$target`"") }
+        }
+        $note = Join-Path $dir 'LEEME - README.txt'
+        if (-not (Test-Path $note)) {
+            [IO.File]::WriteAllText($note, @"
+Tus partidas de Crash Tag Team Racing PC (una carpeta por versión: Europa / USA)
+
+  memcard.ps2        la tarjeta de memoria: tus partidas del juego. Copia este archivo para tener una copia de seguridad.
+  states\quick_*     los guardados rápidos (F5 guarda, F8 carga)
+  memcard.backups\   copias de seguridad automáticas de la tarjeta
+
+Cierra el juego antes de copiar o reemplazar estos archivos.
+
+Your Crash Tag Team Racing PC saves (one folder per version: Europa = Europe / USA)
+
+  memcard.ps2        the memory card: your game saves. Copy this file to back them up.
+  states\quick_*     quick saves (F5 saves, F8 loads)
+  memcard.backups\   automatic backups of the card
+
+Close the game before copying or replacing these files.
+"@, (New-Object Text.UTF8Encoding $true))
+        }
+    } catch {}
+}
+# The game's own program (straight into the game) appears next to the Config one only once a version is installed, and goes
+# when none is left; it is kept in tools\starter\game.exe until then.
+function Update-GameExe {
+    try {
+        $kept = Join-Path $Here 'starter\game.exe'
+        if ($Games.Count -gt 0) {
+            if ((Test-Path $kept) -and -not (Test-Path $GameExe)) { Copy-Item $kept $GameExe }
+        } elseif (Test-Path $GameExe) {
+            Remove-Item $GameExe -Force
+            if (Test-Path $ShortcutFile) { Remove-Item $ShortcutFile -Force }
+        }
+    } catch {}
+}
+Update-SavesFolder
+Update-GameExe
+if ($Play -and $Games.Count -gt 0) {
+    $g = @($Games | Where-Object { $_.name -eq [string]$cfg.version })[0]
+    if (-not $g) { $g = $Games[0] }
+    Start-Game $g
+    exit 0
+}
+
+# the game's shortcut on the desktop (the button at the end of an installation)
+function Make-Shortcut {
+    $s = (New-Object -ComObject WScript.Shell).CreateShortcut($ShortcutFile)
+    $s.TargetPath = $GameExe; $s.WorkingDirectory = Split-Path -Parent $GameExe; $s.IconLocation = "$GameExe,0"; $s.Save()
+}
+function Extra { $Extra[$UiLangs[[Math]::Max(0, $cUi.SelectedIndex)][0]] }
+# a flat button in the profile's colours: the main one purple, the others outlined
+function Style-Button($b, [bool]$main) {
+    $b.FlatStyle = 'Flat'; $b.Cursor = [Windows.Forms.Cursors]::Hand
+    if ($main) { $b.BackColor = $Theme.purple; $b.ForeColor = [Drawing.Color]::White; $b.FlatAppearance.BorderSize = 0; $b.FlatAppearance.MouseOverBackColor = $Theme.hover; $b.FlatAppearance.MouseDownBackColor = $Theme.deep }
+    else { $b.BackColor = $Theme.panel; $b.ForeColor = $Theme.pale; $b.FlatAppearance.BorderColor = $Theme.line; $b.FlatAppearance.MouseOverBackColor = $Theme.line }
+}
+
 # ---------------------------------------------------------------- window
 $form = New-Object Windows.Forms.Form
 $form.StartPosition = 'CenterScreen'; $form.FormBorderStyle = 'FixedDialog'; $form.MaximizeBox = $false
-$form.BackColor = [Drawing.Color]::FromArgb(24, 26, 34); $form.ForeColor = [Drawing.Color]::White; $form.Font = New-Object Drawing.Font('Segoe UI', 10)
-$header = New-Object Windows.Forms.Label
-$header.Text = 'CRASH TAG TEAM RACING'; $header.Font = New-Object Drawing.Font('Segoe UI Black', 20); $header.ForeColor = [Drawing.Color]::FromArgb(255, 160, 40)
-$header.AutoSize = $false; $header.TextAlign = 'MiddleCenter'; $header.SetBounds(0, 10, 520, 44); $form.Controls.Add($header)
-$sub = New-Object Windows.Forms.Label
-$sub.Text = 'PC  ·  ps2-native-recomp'; $sub.ForeColor = [Drawing.Color]::Silver; $sub.AutoSize = $false; $sub.TextAlign = 'MiddleCenter'; $sub.SetBounds(0, 52, 520, 22); $form.Controls.Add($sub)
+$form.BackColor = $Theme.bg; $form.ForeColor = [Drawing.Color]::White; $form.Font = New-Object Drawing.Font('Segoe UI', 10)
 
-$script:y = 86
+# text drawn small without smoothing and blown up 1:N, so it comes out as pixels
+function Draw-PixelText($g, [string]$text, [string]$family, [float]$size, [int]$n, $color, [int]$cx, [int]$y, $shadow, [int]$maxW = 0) {
+    # the biggest size up to $size whose pixels fit in $maxW (the window width less a margin)
+    $tmp = New-Object Drawing.Bitmap 1, 1; $tg = [Drawing.Graphics]::FromImage($tmp)
+    while ($true) {
+        $f = New-Object Drawing.Font($family, $size, [Drawing.FontStyle]::Bold, [Drawing.GraphicsUnit]::Pixel)
+        $sz = $tg.MeasureString($text, $f)
+        if ($maxW -le 0 -or ($sz.Width + 2) * $n -le $maxW -or $size -le 6) { break }
+        $f.Dispose(); $size -= 0.5
+    }
+    $tg.Dispose(); $tmp.Dispose()
+    $w = [int][Math]::Ceiling($sz.Width) + 2; $h = [int][Math]::Ceiling($sz.Height) + 2
+    $bmp = New-Object Drawing.Bitmap $w, $h; $bg = [Drawing.Graphics]::FromImage($bmp)
+    $bg.TextRenderingHint = [Drawing.Text.TextRenderingHint]::SingleBitPerPixelGridFit
+    $bg.DrawString($text, $f, (New-Object Drawing.SolidBrush $color), 1, 1); $bg.Dispose()
+    $g.InterpolationMode = [Drawing.Drawing2D.InterpolationMode]::NearestNeighbor; $g.PixelOffsetMode = [Drawing.Drawing2D.PixelOffsetMode]::Half
+    $x = $cx - [int]($w * $n / 2)
+    if ($shadow) {   # the same letters in the dark purple, one pixel down and right
+        $sh = New-Object Drawing.Bitmap $w, $h; $sg = [Drawing.Graphics]::FromImage($sh); $sg.TextRenderingHint = [Drawing.Text.TextRenderingHint]::SingleBitPerPixelGridFit
+        $sg.DrawString($text, $f, (New-Object Drawing.SolidBrush $shadow), 1, 1); $sg.Dispose()
+        $g.DrawImage($sh, (New-Object Drawing.Rectangle ($x + $n), ($y + $n), ($w * $n), ($h * $n))); $sh.Dispose()
+    }
+    $g.DrawImage($bmp, (New-Object Drawing.Rectangle $x, $y, ($w * $n), ($h * $n))); $bmp.Dispose(); $f.Dispose()
+}
+function Mix($a, $b, [double]$t) { [Drawing.Color]::FromArgb([int]($a.R + ($b.R - $a.R) * $t), [int]($a.G + ($b.G - $a.G) * $t), [int]($a.B + ($b.B - $a.B) * $t)) }
+# the header: a pixel-art night in the profile's purples (sky in bands, stars, moon, hills and the track), with the title on it
+function New-Header([int]$W, [int]$H) {
+    $bmp = New-Object Drawing.Bitmap $W, $H; $g = [Drawing.Graphics]::FromImage($bmp)
+    $px = 4
+    $bands = [int]($H / $px)
+    for ($i = 0; $i -lt $bands; $i++) { $c = Mix $Theme.deep $Theme.purple ([Math]::Floor($i * 6 / $bands) / 6); $g.FillRectangle((New-Object Drawing.SolidBrush $c), 0, $i * $px, $W, $px) }
+    $rnd = New-Object Random 7
+    for ($i = 0; $i -lt 46; $i++) {
+        $sx = $rnd.Next(0, $W / $px) * $px; $sy = $rnd.Next(0, ($H - 40) / $px) * $px
+        $c = if ($rnd.Next(3) -eq 0) { $Theme.pale } else { [Drawing.Color]::FromArgb(150, 255, 255, 255) }
+        $g.FillRectangle((New-Object Drawing.SolidBrush $c), $sx, $sy, $px / 2, $px / 2)
+        if ($rnd.Next(9) -eq 0) { foreach ($d in @(@(-2, 0), @(2, 0), @(0, -2), @(0, 2))) { $g.FillRectangle((New-Object Drawing.SolidBrush $Theme.pale), $sx + $d[0], $sy + $d[1], 2, 2) } }
+    }
+    # the moon: a disc of 4-pixel squares with a few craters
+    $mx = $W - 30; $my = 24; $r = 4
+    for ($a = -$r; $a -le $r; $a++) { for ($b = -$r; $b -le $r; $b++) { if ($a * $a + $b * $b -le $r * $r + 2) {
+        $c = if (($a + $b) % 4 -eq 0 -and $a * $a + $b * $b -lt 10) { $Theme.lilac } else { $Theme.pale }
+        $g.FillRectangle((New-Object Drawing.SolidBrush $c), $mx + $a * $px, $my + $b * $px, $px, $px) } } }
+    # hills in two shades and the race track along the bottom, in the window's own background colour so they flow into it
+    $far = Mix $Theme.deep $Theme.bg 0.35
+    for ($x = 0; $x -lt $W; $x += $px) {
+        $h1 = [int](14 + 10 * [Math]::Sin($x / 37.0) + 6 * [Math]::Sin($x / 13.0)); $h1 -= $h1 % $px
+        $g.FillRectangle((New-Object Drawing.SolidBrush $far), $x, $H - 12 - $h1, $px, $h1 + 12)
+        $h2 = [int](8 + 6 * [Math]::Sin(($x + 90) / 23.0)); $h2 -= $h2 % $px
+        $g.FillRectangle((New-Object Drawing.SolidBrush $Theme.bg), $x, $H - 8 - $h2, $px, $h2 + 8)
+    }
+    for ($x = 0; $x -lt $W; $x += 16) { $g.FillRectangle((New-Object Drawing.SolidBrush $(if (($x / 16) % 2) { $Theme.purple } else { $Theme.pale })), $x, $H - 6, 8, 2) }
+    Draw-PixelText $g 'CRASH TAG TEAM RACING' 'Arial Black' 13 3 ([Drawing.Color]::White) ([int]($W / 2)) 14 $Theme.deep ($W - 120)
+    Draw-PixelText $g 'PC PORT  ·  BY NYXBORN' 'Arial' 9 2 $Theme.pale ([int]($W / 2)) 58 $Theme.deep ($W - 40)
+    $g.Dispose(); $bmp
+}
+$header = New-Object Windows.Forms.PictureBox; $header.SetBounds(0, 0, 520, 104); $header.Image = New-Header 520 104; $form.Controls.Add($header)
+
+$script:y = 116
 $labels = @{}
-function Add-Label([string]$key) { $l = New-Object Windows.Forms.Label; $l.SetBounds(24, $script:y + 3, 250, 24); $l.ForeColor = [Drawing.Color]::Gainsboro; $form.Controls.Add($l); $script:labels[$key] = $l }
-function Add-Combo($items) { $c = New-Object Windows.Forms.ComboBox; $c.DropDownStyle = 'DropDownList'; $c.SetBounds(280, $script:y, 220, 26); foreach ($i in $items) { [void]$c.Items.Add($i) }; $form.Controls.Add($c); $script:y += 32; $c }
-function Add-Check([string]$key) { $c = New-Object Windows.Forms.CheckBox; $c.SetBounds(24, $script:y, 480, 26); $c.ForeColor = [Drawing.Color]::White; $form.Controls.Add($c); $script:labels[$key] = $c; $script:y += 30; $c }
-function Add-Section([string]$key) { $l = New-Object Windows.Forms.Label; $l.SetBounds(16, $script:y + 4, 480, 24); $l.Font = New-Object Drawing.Font('Segoe UI Semibold', 11); $l.ForeColor = [Drawing.Color]::FromArgb(255, 190, 90); $form.Controls.Add($l); $script:labels[$key] = $l; $script:y += 30 }
+function Add-Label([string]$key) { $l = New-Object Windows.Forms.Label; $l.SetBounds(24, $script:y + 3, 250, 24); $l.ForeColor = $Theme.pale; $form.Controls.Add($l); $script:labels[$key] = $l }
+function Add-Combo($items) { $c = New-Object Windows.Forms.ComboBox; $c.DropDownStyle = 'DropDownList'; $c.FlatStyle = 'Flat'; $c.BackColor = $Theme.panel; $c.ForeColor = [Drawing.Color]::White; $c.SetBounds(280, $script:y, 220, 26); foreach ($i in $items) { [void]$c.Items.Add($i) }; $form.Controls.Add($c); $script:y += 32; $c }
+function Add-Check([string]$key) { $c = New-Object Windows.Forms.CheckBox; $c.SetBounds(24, $script:y, 480, 26); $c.ForeColor = $Theme.pale; $c.FlatStyle = 'Flat'; $c.FlatAppearance.BorderColor = $Theme.lilac; $c.FlatAppearance.CheckedBackColor = $Theme.deep; $form.Controls.Add($c); $script:labels[$key] = $c; $script:y += 30; $c }
+# a section title with a pixel square in front and a thin purple line under it
+function Add-Section([string]$key) {
+    $sq = New-Object Windows.Forms.Panel; $sq.SetBounds(16, $script:y + 12, 8, 8); $sq.BackColor = $Theme.purple; $form.Controls.Add($sq)
+    $l = New-Object Windows.Forms.Label; $l.SetBounds(30, $script:y + 4, 470, 24); $l.Font = New-Object Drawing.Font('Segoe UI Semibold', 11); $l.ForeColor = $Theme.lilac; $form.Controls.Add($l); $script:labels[$key] = $l
+    $ln = New-Object Windows.Forms.Panel; $ln.SetBounds(16, $script:y + 28, 488, 2); $ln.BackColor = $Theme.line; $form.Controls.Add($ln)
+    $script:y += 34
+}
 
 Add-Label 'ui';    $cUi    = Add-Combo ($UiLangs | ForEach-Object { $_[1] })
 Add-Label 'ver';   $cVer   = Add-Combo @()
@@ -151,21 +325,27 @@ $script:y += 2
 $kVsync = Add-Check 'vsync'; $kFull = Add-Check 'full'; $kReshade = Add-Check 'reshade'
 Add-Section 'extras'
 $kFps = Add-Check 'fps'; $kPsp = Add-Check 'psp'
-Add-Section 'pad'
-Add-Label 'inv';   $cInv   = Add-Combo @('-', '-', '-', '-')
 $script:y += 12
-$note = New-Object Windows.Forms.Label; $note.SetBounds(16, $script:y - 6, 488, 20); $note.ForeColor = [Drawing.Color]::FromArgb(255, 190, 90); $note.TextAlign = 'MiddleCenter'; $form.Controls.Add($note)
+$note = New-Object Windows.Forms.Label; $note.SetBounds(16, $script:y - 6, 488, 20); $note.ForeColor = $Theme.lilac; $note.TextAlign = 'MiddleCenter'; $form.Controls.Add($note)
 $script:y += 16
-$bPlay = New-Object Windows.Forms.Button; $bPlay.SetBounds(16, $script:y, 196, 48); $bPlay.Font = New-Object Drawing.Font('Segoe UI Black', 14)
-$bPlay.BackColor = [Drawing.Color]::FromArgb(255, 150, 30); $bPlay.ForeColor = [Drawing.Color]::Black; $bPlay.FlatStyle = 'Flat'; $form.Controls.Add($bPlay)
-$bImport = New-Object Windows.Forms.Button; $bImport.SetBounds(222, $script:y + 8, 120, 32); $bImport.FlatStyle = 'Flat'; $bImport.ForeColor = [Drawing.Color]::White; $form.Controls.Add($bImport)
-$bDel = New-Object Windows.Forms.Button; $bDel.SetBounds(350, $script:y + 8, 82, 32); $bDel.FlatStyle = 'Flat'; $bDel.ForeColor = [Drawing.Color]::FromArgb(255, 120, 100); $form.Controls.Add($bDel)
-$bQuit = New-Object Windows.Forms.Button; $bQuit.SetBounds(440, $script:y + 8, 64, 32); $bQuit.FlatStyle = 'Flat'; $bQuit.ForeColor = [Drawing.Color]::Silver; $form.Controls.Add($bQuit)
+$bPlay = New-Object Windows.Forms.Button; $bPlay.SetBounds(16, $script:y, 196, 48); $bPlay.Font = New-Object Drawing.Font('Segoe UI Black', 14); Style-Button $bPlay $true; $form.Controls.Add($bPlay)
+$bImport = New-Object Windows.Forms.Button; $bImport.SetBounds(222, $script:y + 8, 120, 32); Style-Button $bImport $false; $form.Controls.Add($bImport)
+$bDel = New-Object Windows.Forms.Button; $bDel.SetBounds(350, $script:y + 8, 82, 32); Style-Button $bDel $false; $bDel.ForeColor = $Theme.red; $form.Controls.Add($bDel)
+$bQuit = New-Object Windows.Forms.Button; $bQuit.SetBounds(440, $script:y + 8, 64, 32); Style-Button $bQuit $false; $bQuit.ForeColor = $Theme.muted; $form.Controls.Add($bQuit)
 $script:y += 60
-$by = New-Object Windows.Forms.Label; $by.Text = 'By NyxBorn'; $by.Font = New-Object Drawing.Font('Segoe UI Semibold', 9); $by.ForeColor = [Drawing.Color]::FromArgb(150, 150, 170)
-$by.AutoSize = $false; $by.TextAlign = 'MiddleCenter'; $by.SetBounds(0, $script:y, 520, 20); $form.Controls.Add($by)
-$form.ClientSize = New-Object Drawing.Size(520, ($script:y + 28))
+# footer: a pixel strip in the purple gradient, and the author with a link to the GitHub profile
+$strip = New-Object Windows.Forms.PictureBox; $strip.SetBounds(0, $script:y, 520, 4)
+$sb = New-Object Drawing.Bitmap 520, 4; $sg = [Drawing.Graphics]::FromImage($sb)
+for ($x = 0; $x -lt 520; $x += 8) { $sg.FillRectangle((New-Object Drawing.SolidBrush (Mix $Theme.deep $Theme.purple ([Math]::Floor($x * 8 / 520) / 8))), $x, 0, 8, 4) }
+$sg.Dispose(); $strip.Image = $sb; $form.Controls.Add($strip)
+$Version = 'v1.1.0'   # this package's release (v1.0.0 was the first)
+$by = New-Object Windows.Forms.LinkLabel; $by.Text = "By NyxBorn  ·  github.com/Miguel0827  ·  $Version"; $by.Font = New-Object Drawing.Font('Segoe UI Semibold', 9)
+$by.LinkArea = New-Object Windows.Forms.LinkArea(15, 21); $by.ForeColor = $Theme.lilac; $by.LinkColor = $Theme.muted; $by.ActiveLinkColor = $Theme.pale; $by.VisitedLinkColor = $Theme.muted; $by.LinkBehavior = 'HoverUnderline'
+$by.AutoSize = $false; $by.TextAlign = 'MiddleCenter'; $by.SetBounds(0, $script:y + 8, 520, 20); $form.Controls.Add($by)
+$by.Add_LinkClicked({ Start-Process 'https://github.com/Miguel0827' })
+$form.ClientSize = New-Object Drawing.Size(520, ($script:y + 34))
 $form.AcceptButton = $bPlay; $form.CancelButton = $bQuit
+$form.Add_Shown({ $form.ActiveControl = $(if ($bPlay.Enabled) { $bPlay } else { $bImport }) })   # no list highlighted in blue on opening
 # where everything was put, for Relayout: a hidden row (version, game language) gives its room to what is below it
 $baseTop = @{}; foreach ($c in $form.Controls) { $baseTop[$c] = $c.Top }
 $baseHeight = $form.ClientSize.Height
@@ -200,8 +380,10 @@ function Fill-Versions {
 function Load-Game {
     $g = Current-Game
     $has = $null -ne $g
-    foreach ($c in @($cVer, $cGame, $cScale, $cLook, $cApi, $kVsync, $kFull, $kReshade, $kFps, $kPsp, $cInv, $bPlay)) { $c.Enabled = $has }
+    foreach ($c in @($cVer, $cGame, $cScale, $cLook, $cApi, $kVsync, $kFull, $kReshade, $kFps, $kPsp, $bPlay)) { $c.Enabled = $has }
     $bDel.Visible = $has
+    # the button to press stands out: Import while nothing is installed, PLAY once something is
+    Style-Button $bPlay $has; Style-Button $bImport (-not $has)
     $note.Text = $(if ($has) { '' } else { (Lang).none })
     if (-not $has) { Relayout $false $false }
     if (-not $has) { return }
@@ -214,7 +396,6 @@ function Load-Game {
     $sc = 2; if ($ini.scale -match '^[1-4]$') { $sc = [int]$ini.scale }; $cScale.SelectedIndex = $sc - 1
     $lk = 0; if ($ini.look) { $i = [Array]::IndexOf(@($Looks | ForEach-Object { $_[0] -replace '_', '' }), ($ini.look -replace '[ _]', '').ToLower()); if ($i -ge 0) { $lk = $i } }; $cLook.SelectedIndex = $lk
     $kVsync.Checked = $(if ($ini.vsync) { $ini.vsync -match '^(on|1|yes)$' } else { $true })
-    $inv = 0; if ($ini.rightinvert) { $inv = [Math]::Max(0, [Array]::IndexOf($InvWords, $ini.rightinvert.ToLower())) }; $cInv.SelectedIndex = $inv
     $kFps.Enabled = (Get-Item (Join-Path $Root "games\$($g.name)\patchsets\fps.txt") -ErrorAction SilentlyContinue).Length -gt 0
     $kPsp.Enabled = (Get-Item (Join-Path $Root "games\$($g.name)\patchsets\psp.txt") -ErrorAction SilentlyContinue).Length -gt 0
     $kReshade.Enabled = $cApi.SelectedIndex -eq 0
@@ -224,9 +405,27 @@ function Apply-Texts {
     $form.Text = $t.title
     foreach ($k in $labels.Keys) { if ($t.ContainsKey($k)) { $labels[$k].Text = $t[$k] } }
     $bPlay.Text = $t.play; $bImport.Text = $t.import; $bDel.Text = $t.del; $bQuit.Text = $t.quit
-    $sel = $cInv.SelectedIndex; $cInv.Items.Clear(); foreach ($w in $t.invs) { [void]$cInv.Items.Add($w) }; $cInv.SelectedIndex = [Math]::Max(0, $sel)
     Fill-Versions
     if (-not (Current-Game)) { $note.Text = $t.none }
+}
+
+# the reminder before importing (the game is the player's: an ISO of their own disc), in the launcher's colours
+function Show-Reminder {
+    $x = Extra
+    $d = New-Object Windows.Forms.Form; $d.Text = $x.owntitle; $d.StartPosition = 'CenterParent'; $d.FormBorderStyle = 'FixedDialog'
+    $d.MaximizeBox = $false; $d.MinimizeBox = $false; $d.ShowInTaskbar = $false; $d.BackColor = $Theme.bg; $d.Font = New-Object Drawing.Font('Segoe UI', 10)
+    $d.ClientSize = New-Object Drawing.Size(420, 170)
+    $band = New-Object Windows.Forms.PictureBox; $band.SetBounds(0, 0, 420, 8)
+    $bb = New-Object Drawing.Bitmap 420, 8; $bg = [Drawing.Graphics]::FromImage($bb)
+    for ($i = 0; $i -lt 420; $i += 8) { $bg.FillRectangle((New-Object Drawing.SolidBrush (Mix $Theme.deep $Theme.purple ([Math]::Floor($i * 8 / 420) / 8))), $i, 0, 8, 8) }
+    $bg.Dispose(); $band.Image = $bb; $d.Controls.Add($band)
+    $head = New-Object Windows.Forms.Label; $head.Text = $x.owntitle; $head.SetBounds(20, 20, 380, 26); $head.Font = New-Object Drawing.Font('Segoe UI Semibold', 12); $head.ForeColor = $Theme.lilac; $d.Controls.Add($head)
+    $msg = New-Object Windows.Forms.Label; $msg.Text = $x.own; $msg.SetBounds(20, 50, 380, 56); $msg.ForeColor = $Theme.pale; $d.Controls.Add($msg)
+    $ok = New-Object Windows.Forms.Button; $ok.Text = $x.ok; $ok.SetBounds(196, 120, 120, 34); Style-Button $ok $true; $ok.DialogResult = 'OK'; $d.Controls.Add($ok)
+    $no = New-Object Windows.Forms.Button; $no.Text = $x.no; $no.SetBounds(324, 120, 80, 34); Style-Button $no $false; $no.ForeColor = $Theme.muted; $no.DialogResult = 'Cancel'; $d.Controls.Add($no)
+    $d.AcceptButton = $ok; $d.CancelButton = $no
+    $r = $d.ShowDialog($form); $d.Dispose()
+    $r -eq 'OK'
 }
 
 # ---------------------------------------------------------------- importing a disc (runs tools\Instalar.ps1 and shows its output)
@@ -243,6 +442,8 @@ function Import-Iso {
         if ($p) { $started = $p.StartTime } else { Remove-Item $lock -ErrorAction SilentlyContinue }   # left by an installation that was stopped
     }
     if (-not $p) {
+        # the game is the player's: the ISO has to come from their own disc
+        if (-not (Show-Reminder)) { return }
         $dlg = New-Object Windows.Forms.OpenFileDialog; $dlg.Filter = $t.isofilter
         if ($dlg.ShowDialog($form) -ne 'OK') { return }
         Remove-Item $log -ErrorAction SilentlyContinue
@@ -262,17 +463,29 @@ function Import-Iso {
     }
 
     $w = New-Object Windows.Forms.Form; $w.Text = $t.installing; $w.StartPosition = 'CenterParent'; $w.ClientSize = New-Object Drawing.Size(720, 440)
-    $w.BackColor = [Drawing.Color]::FromArgb(24, 26, 34); $w.ForeColor = [Drawing.Color]::White; $w.ControlBox = $false; $w.Font = New-Object Drawing.Font('Segoe UI', 10)
-    $stage = New-Object Windows.Forms.Label; $stage.SetBounds(12, 12, 560, 26); $stage.Font = New-Object Drawing.Font('Segoe UI Semibold', 12); $stage.ForeColor = [Drawing.Color]::FromArgb(255, 190, 90); $w.Controls.Add($stage)
-    $clock = New-Object Windows.Forms.Label; $clock.SetBounds(580, 14, 128, 24); $clock.TextAlign = 'MiddleRight'; $clock.ForeColor = [Drawing.Color]::Silver; $w.Controls.Add($clock)
-    $bar = New-Object Windows.Forms.ProgressBar; $bar.SetBounds(12, 44, 696, 26); $bar.Minimum = 0; $bar.Maximum = 100; $bar.Style = 'Continuous'; $w.Controls.Add($bar)
-    $box = New-Object Windows.Forms.TextBox; $box.Multiline = $true; $box.ReadOnly = $true; $box.ScrollBars = 'Vertical'; $box.SetBounds(12, 82, 696, 306)
-    $box.BackColor = [Drawing.Color]::Black; $box.ForeColor = [Drawing.Color]::LightGreen; $box.Font = New-Object Drawing.Font('Consolas', 9); $w.Controls.Add($box)
-    $ok = New-Object Windows.Forms.Button; $ok.Text = $t.close; $ok.SetBounds(588, 396, 120, 36); $ok.Visible = $false; $ok.FlatStyle = 'Flat'
-    $ok.BackColor = [Drawing.Color]::FromArgb(255, 150, 30); $ok.ForeColor = [Drawing.Color]::Black; $ok.Font = New-Object Drawing.Font('Segoe UI Semibold', 10); $w.Controls.Add($ok)
+    $w.BackColor = $Theme.bg; $w.ForeColor = [Drawing.Color]::White; $w.ControlBox = $false; $w.Font = New-Object Drawing.Font('Segoe UI', 10)
+    $stage = New-Object Windows.Forms.Label; $stage.SetBounds(12, 12, 560, 26); $stage.Font = New-Object Drawing.Font('Segoe UI Semibold', 12); $stage.ForeColor = $Theme.lilac; $w.Controls.Add($stage)
+    $clock = New-Object Windows.Forms.Label; $clock.SetBounds(580, 14, 128, 24); $clock.TextAlign = 'MiddleRight'; $clock.ForeColor = $Theme.muted; $w.Controls.Add($clock)
+    # the progress bar as a row of pixel blocks in the purple gradient (Windows' own bar is green and cannot be recoloured)
+    $bar = New-Object Windows.Forms.PictureBox; $bar.SetBounds(12, 44, 696, 26); $bar.BackColor = $Theme.panel; $w.Controls.Add($bar)
+    $script:barVal = 0
+    $bar.Add_Paint({ param($s, $e)
+        $blocks = 58; $bw = 12; $filled = [int]($blocks * $script:barVal / 100)
+        for ($i = 0; $i -lt $blocks; $i++) {
+            $c = if ($i -lt $filled) { Mix $Theme.deep $Theme.purple ($i / [double]$blocks) } else { $Theme.line }
+            $e.Graphics.FillRectangle((New-Object Drawing.SolidBrush $c), 2 + $i * $bw, 4, $bw - 2, 18)
+        } })
+    $box = New-Object Windows.Forms.TextBox; $box.Multiline = $true; $box.ReadOnly = $true; $box.ScrollBars = 'Vertical'; $box.SetBounds(12, 82, 696, 306); $box.BorderStyle = 'FixedSingle'
+    $box.BackColor = $Theme.panel; $box.ForeColor = $Theme.pale; $box.Font = New-Object Drawing.Font('Consolas', 9); $w.Controls.Add($box)
+    $ok = New-Object Windows.Forms.Button; $ok.Text = $t.close; $ok.SetBounds(588, 396, 120, 36); $ok.Visible = $false; Style-Button $ok $true
+    $ok.Font = New-Object Drawing.Font('Segoe UI Semibold', 10); $w.Controls.Add($ok)
     $ok.Add_Click({ $w.Close() })
+    # once it is installed: the game's shortcut on the desktop, made only when the player presses it
+    $sc = New-Object Windows.Forms.Button; $sc.SetBounds(12, 396, 300, 36); $sc.Visible = $false; Style-Button $sc $false; $sc.ForeColor = $Theme.lilac; $sc.FlatAppearance.BorderColor = $Theme.purple; $w.Controls.Add($sc)
+    $sc.Text = (Extra).sc
+    $sc.Add_Click({ try { Make-Shortcut; $sc.Text = [char]0x2713 + ' ' + (Extra).scdone; $sc.Enabled = $false } catch { [void][Windows.Forms.MessageBox]::Show($_.Exception.Message, $t.title, 'OK', 'Error') } })
     # Cancel: the installer and everything it started stop; the next import of that version cleans up what was half made
-    $stop = New-Object Windows.Forms.Button; $stop.Text = $t.cancel; $stop.SetBounds(12, 396, 120, 36); $stop.FlatStyle = 'Flat'; $stop.ForeColor = [Drawing.Color]::Silver; $w.Controls.Add($stop)
+    $stop = New-Object Windows.Forms.Button; $stop.Text = $t.cancel; $stop.SetBounds(12, 396, 120, 36); Style-Button $stop $false; $stop.ForeColor = $Theme.muted; $w.Controls.Add($stop)
     $script:cancelled = $false
     $stop.Add_Click({ $script:cancelled = $true; $stop.Enabled = $false; Start-Process taskkill -ArgumentList '/T', '/F', '/PID', $p.Id -WindowStyle Hidden -Wait })
     # what the installer prints, in order, and where the bar is when it appears (the conversion's own six steps are most of the time)
@@ -295,21 +508,25 @@ function Import-Iso {
                 # inside the long steps the bar creeps on, so it never looks stuck (never past the next mark)
                 $next = 100; foreach ($m in $marks) { if ($m[1] -gt $pct) { $next = $m[1]; break } }
                 if ($script:creep -lt $next - 1 -and $script:creep -ge $pct) { $script:creep += 0.15 } else { $script:creep = $pct }
-                $bar.Value = [Math]::Min(100, [int][Math]::Max($pct, [Math]::Min($next - 1, $script:creep)))
+                $script:barVal = [Math]::Min(100, [int][Math]::Max($pct, [Math]::Min($next - 1, $script:creep))); $bar.Invalidate()
                 $stage.Text = $t.steps[$step]
             } catch {}
         }
         if ($p.HasExited) {
             $timer.Stop(); $ok.Visible = $true; $stop.Visible = $false; $ok.Focus(); $w.ControlBox = $true
             if ($script:cancelled) { $w.Text = $t.cancelled; $stage.Text = $t.cancelled; $stage.ForeColor = [Drawing.Color]::Silver }
-            elseif (Select-String -Path $log -Pattern '^LISTO' -Quiet) { $w.Text = $t.done; $stage.Text = $t.done; $bar.Value = 100 }
-            else { $w.Text = $t.failed; $stage.Text = $t.failed; $stage.ForeColor = [Drawing.Color]::Tomato }
+            elseif (Select-String -Path $log -Pattern '^LISTO' -Quiet) {
+                $w.Text = $t.done; $stage.Text = $t.done; $script:barVal = 100; $bar.Invalidate()
+                if (Test-Path $GameExe) { $sc.Visible = $true; if (Test-Path $ShortcutFile) { $sc.Text = [char]0x2713 + ' ' + (Extra).scdone; $sc.Enabled = $false } }
+            }
+            else { $w.Text = $t.failed; $stage.Text = $t.failed; $stage.ForeColor = $Theme.red }
         }
     })
     $script:creep = 0
     $timer.Start()
     [void]$w.ShowDialog($form)
     $script:Games = Get-Games
+    $Games = $script:Games; Update-SavesFolder; Update-GameExe
     Fill-Versions; Load-Game
 }
 
@@ -336,6 +553,7 @@ $bDel.Add_Click({
     if ($keepSaves -and (Test-Path $gameDir)) { Get-ChildItem $gameDir -Force | Where-Object { $_.Name -match '^(memcard\.ps2.*|keys\.ini|states|reports)$' } | ForEach-Object { Copy-Item $_.FullName $backup -Recurse -Force } }
     foreach ($d in @($gameDir, (Join-Path $Root "build\native-$($g.name)"), (Join-Path $Root "generated\$($g.name)"))) { if (Test-Path $d) { Remove-Item $d -Recurse -Force -ErrorAction SilentlyContinue } }
     $script:Games = Get-Games
+    $Games = $script:Games; Update-GameExe
     $cVer.SelectedIndex = -1
     Fill-Versions; Load-Game
 })
@@ -343,31 +561,13 @@ $bDel.Add_Click({
 $bPlay.Add_Click({
     $g = Current-Game; if (-not $g) { return }
     $gameDir = Join-Path $Root "games\$($g.name)"
-    Set-IniLines (Join-Path $gameDir 'keys.ini') @{ scale = ($cScale.SelectedIndex + 1); look = $Looks[$cLook.SelectedIndex][0]; vsync = $(if ($kVsync.Checked) { 'on' } else { 'off' }); right_invert = $InvWords[$cInv.SelectedIndex] }
+    Set-IniLines (Join-Path $gameDir 'keys.ini') @{ scale = ($cScale.SelectedIndex + 1); look = $Looks[$cLook.SelectedIndex][0]; vsync = $(if ($kVsync.Checked) { 'on' } else { 'off' }) }
     $cfg.ui = $UiLangs[$cUi.SelectedIndex][0]; $cfg.version = $g.name
     if ($cGame.SelectedIndex -ge 0) { $cfg.game = [int]@($g.languages)[$cGame.SelectedIndex] }
     $cfg.api = $(if ($cApi.SelectedIndex -eq 1) { 'dx12' } else { 'vulkan' })
     $cfg.reshade = $kReshade.Checked; $cfg.fps = $kFps.Checked; $cfg.psp = $kPsp.Checked; $cfg.full = $kFull.Checked
     [IO.File]::WriteAllText($CfgFile, ($cfg | ConvertTo-Json), (New-Object Text.UTF8Encoding $false))
-    # the patches of this run: wide screen always (it is in the converted program), the others as chosen
-    $sets = Join-Path $gameDir 'patchsets'
-    $parts = @('ws.txt'); if ($kFps.Checked -and $kFps.Enabled) { $parts += 'fps.txt' }; if ($kPsp.Checked -and $kPsp.Enabled) { $parts += 'psp.txt' }
-    $text = ($parts | ForEach-Object { $f = Join-Path $sets $_; if (Test-Path $f) { [IO.File]::ReadAllText($f).TrimEnd() } } | Where-Object { $_ }) -join "`n"
-    [IO.File]::WriteAllText((Join-Path $gameDir 'patches_run.txt'), $text + "`n", (New-Object Text.UTF8Encoding $false))
-    $elf = "games/$($g.name)/patched/$($g.elf)"; if (-not (Test-Path (Join-Path $Root $elf))) { $elf = "games/$($g.name)/disc/$($g.elf)" }
-    $argv = @($elf, '--disc', "games/$($g.name)/disc.iso", '--window', '--game-dir', "games/$($g.name)", '--memcard', "games/$($g.name)/memcard.ps2", '--patches', "games/$($g.name)/patches_run.txt")
-    if ($g.widescreen) { $argv += '--widescreen' }
-    if ($kFull.Checked) { $argv += '--fullscreen' }
-    $psi = New-Object Diagnostics.ProcessStartInfo
-    $psi.FileName = Join-Path $Root "build\native-$($g.name)\ps2run.exe"; $psi.WorkingDirectory = $Root; $psi.UseShellExecute = $false
-    $psi.Arguments = ($argv | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } }) -join ' '
-    $ev = $psi.EnvironmentVariables
-    $ev['PS2_LANGUAGE'] = [string]$cfg.game
-    $ev['PS2_MENU_LANG'] = $cfg.ui
-    $ev['PS2_GPU_BACKEND'] = $cfg.api
-    if ($cfg.api -ne 'vulkan' -or -not $kReshade.Checked) { $ev['DISABLE_VK_LAYER_reshade_1'] = '1' }
-    $ev['PS2_DMA_TIME'] = '120,16'   # the title and menus: GIF transfers take the console's time (always on)
-    [void][Diagnostics.Process]::Start($psi)
+    Start-Game $g
     $form.Close()
 })
 

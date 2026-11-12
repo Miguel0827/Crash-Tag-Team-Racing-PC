@@ -82,10 +82,10 @@ index 4a0b82c..198b3aa 100644
  const char *action_name(int action);  // the word used in keys.ini
  
 diff --git a/host/quickmenu.cpp b/host/quickmenu.cpp
-index 2857114..5ddf914 100644
+index 2857114..6b742e2 100644
 --- a/host/quickmenu.cpp
 +++ b/host/quickmenu.cpp
-@@ -107,11 +107,59 @@ constexpr const char *kFont[95] = {
+@@ -107,20 +107,81 @@ constexpr const char *kFont[95] = {
      "..... ..... .#... #.#.# ...#. ..... ..... .....",  // ~
  };
  
@@ -149,8 +149,80 @@ index 2857114..5ddf914 100644
  constexpr int kVisibleRows = 11;  // lines of the keys page shown at once; the page scrolls
  constexpr int kKeysPageChars = 58;
  
-@@ -130,8 +178,8 @@ struct Canvas {
+ constexpr std::uint32_t rgba(int r, int g, int b, int a) {
+     return static_cast<std::uint32_t>(r) | static_cast<std::uint32_t>(g) << 8 | static_cast<std::uint32_t>(b) << 16 | static_cast<std::uint32_t>(a) << 24;
+ }
+-constexpr std::uint32_t kPanel = rgba(12, 14, 20, 215), kFrame = rgba(96, 104, 124, 255), kTitle = rgba(240, 200, 110, 255),
+-                        kText = rgba(226, 229, 236, 255), kBar = rgba(236, 190, 88, 248), kBarText = rgba(16, 16, 20, 255),
+-                        kDim = rgba(140, 146, 162, 255), kBarDim = rgba(84, 62, 24, 255);
++// the colours of NyxBorn's launcher (and GitHub profile): GitHub's dark background, purple frame and bar, lilac text
++constexpr std::uint32_t kPanel = rgba(13, 17, 23, 238), kFrame = rgba(168, 85, 247, 255), kTitle = rgba(192, 132, 252, 255),
++                        kText = rgba(233, 213, 255, 255), kBar = rgba(168, 85, 247, 250), kBarText = rgba(255, 255, 255, 255),
++                        kDim = rgba(139, 148, 158, 255), kBarDim = rgba(46, 16, 101, 255);
++// the pixel-art touches: the title band (dark to mid purple), the stars on it, the shadow under the letters, the dashed lines
++constexpr std::uint32_t kDeep = rgba(46, 16, 101, 255), kBandLow = rgba(88, 28, 135, 255), kStar = rgba(233, 213, 255, 255),
++                        kLine = rgba(48, 54, 61, 255), kClear = rgba(0, 0, 0, 0);
++
++std::uint32_t mix(std::uint32_t a, std::uint32_t b, int t, int n) {  // a to b, step t of n
++    std::uint32_t out = 0;
++    for (int sh = 0; sh < 32; sh += 8) {
++        const int ca = static_cast<int>((a >> sh) & 0xFFu), cb = static_cast<int>((b >> sh) & 0xFFu);
++        out |= static_cast<std::uint32_t>(ca + (cb - ca) * t / std::max(1, n)) << sh;
++    }
++    return out;
++}
+ 
+ struct Canvas {
+     Picture &p;
+@@ -128,10 +189,55 @@ struct Canvas {
+         const int x0 = std::max(0, x), y0 = std::max(0, y), x1 = std::min(p.width, x + w), y1 = std::min(p.height, y + h);
+         for (int j = y0; j < y1; ++j) std::fill(p.rgba.begin() + j * p.width + x0, p.rgba.begin() + j * p.width + x1, color);
      }
++    // the panel's frame: thick pixels in purple, with the corners cut off like an old console menu
++    void frame_box(int s) {
++        const int f = std::max(3, s + s / 2);
++        fill(0, 0, p.width, f, kFrame);
++        fill(0, p.height - f, p.width, f, kFrame);
++        fill(0, 0, f, p.height, kFrame);
++        fill(p.width - f, 0, f, p.height, kFrame);
++        for (const int cx : {0, p.width - f})
++            for (const int cy : {0, p.height - f}) fill(cx, cy, f, f, kClear);
++    }
++    // the title band: the purple of the launcher's sky in a few flat steps, with a handful of one-pixel stars
++    void band(int y0, int h, int s) {
++        const int f = std::max(3, s + s / 2), steps = 4;
++        for (int i = 0; i < steps; ++i) fill(f, y0 + h * i / steps, p.width - 2 * f, h * (i + 1) / steps - h * i / steps, mix(kDeep, kBandLow, i, steps - 1));
++        static const int kStars[][2] = {{7, 2}, {19, 5}, {31, 1}, {44, 4}, {58, 2}, {71, 6}, {83, 3}, {96, 1}, {109, 5}, {121, 2}, {134, 4}, {147, 1}};
++        const int across = p.width / s;
++        for (const auto &st : kStars) {
++            const int sx = across - 4 - st[0] * across / 150;  // from the right, so the title on the left keeps clear
++            if (sx * s <= p.width / 2 || st[1] * s >= h - 2 * s) continue;
++            const int px = sx * s, py = y0 + st[1] * s, d = std::max(2, s);
++            fill(px, py, d, d, kStar);
++            if ((st[0] + st[1]) % 3 == 0) {  // every third one twinkles: a little cross
++                fill(px - d, py, d, d, kTitle); fill(px + d, py, d, d, kTitle);
++                fill(px, py - d, d, d, kTitle); fill(px, py + d, d, d, kTitle);
++            }
++        }
++    }
++    // the highlighted line: purple getting lighter to the right, in flat steps, and a pixel arrow in front of the text
++    void bar(int x, int y, int w, int h, int s) {
++        const int steps = 8;
++        for (int i = 0; i < steps; ++i) fill(x + w * i / steps, y, w * (i + 1) / steps - w * i / steps, h, mix(kDeep, kBar, i + 2, steps + 1));
++        const int ax = x + s, cy = y + h / 2;
++        for (int k = 0; k < 3; ++k) fill(ax + k * s, cy - (5 - 2 * k) * s / 2, s, (5 - 2 * k) * s, kBarText);
++    }
++    // a dashed line, like the track line at the bottom of the launcher's header
++    void dashes(int x, int y, int w, int s) {
++        const int t = std::max(1, s / 2), d = 3 * s;
++        for (int i = 0; x + i * d < x + w; ++i) fill(x + i * d, y, std::min(d, x + w - (x + i * d)), t, (i % 2) ? kLine : kFrame);
++    }
++    // letters with a shadow one font pixel down and right, so they read over any game picture
++    void text_shadow(int x, int y, int s, const std::string &line, std::uint32_t color) {
++        const int o = std::max(1, s / 2);
++        text(x + o, y + o, s, line, kDeep);
++        text(x, y, s, line, color);
++    }
      // one letter is 5 x 8 pixels of the font, each `s` x `s` screen pixels; a letter is 6 font pixels wide with its gap
      void text(int x, int y, int s, const std::string &line, std::uint32_t color) {
 -        for (unsigned char c : line) {
@@ -160,7 +232,7 @@ index 2857114..5ddf914 100644
              for (int row = 0; row < 8; ++row)
                  for (int col = 0; col < 5; ++col)
                      if (glyph[row * 6 + col] == '#') fill(x + col * s, y + row * s, s, s, color);
-@@ -141,32 +189,47 @@ struct Canvas {
+@@ -141,32 +247,47 @@ struct Canvas {
  };
  
  std::string entry_text(int i, const Values &v, bool quit_armed) {
@@ -191,7 +263,11 @@ index 2857114..5ddf914 100644
 +        const auto name = [](int n) { return (spanish() ? kNamesEs : kNames)[n >= 0 && n <= 2 ? n : 1]; };
 +        if (v.sharp_locked) return tr("Text and menus: ", "Textos y menús: ") + std::string(name(v.sharp_now)) + tr(" (set by PS2_SHARP_2D)", " (fijado por PS2_SHARP_2D)");
 +        return tr("Text and menus:  < ", "Textos y menús:  < ") + std::string(name(v.sharp_next)) + " >" + (v.sharp_next != v.sharp_now ? next_start : "");
-+    }
+     }
+-    case Command::fullscreen: return std::string("Full screen: ") + (v.fullscreen ? "on" : "off");
+-    case Command::keys: return "Show keys";
+-    case Command::change_keys: return "Change keys";
+-    case Command::quit: return quit_armed ? "Really quit?  Enter / Cross again" : "Quit the game";
 +    case Command::vsync:
 +        return tr("Vertical sync:  < ", "Sincronización vertical:  < ") + (v.vsync_next ? on : off) + " >" + (v.vsync_next != v.vsync_now ? next_start : "");
 +    case Command::fullscreen: return tr("Full screen: ", "Pantalla completa: ") + (v.fullscreen ? on : off);
@@ -201,11 +277,7 @@ index 2857114..5ddf914 100644
 +        static const char *const kEs[] = {"no", "horizontal", "vertical", "ambos"};
 +        const int n = v.invert >= 0 && v.invert <= 3 ? v.invert : 0;
 +        return tr("Invert right stick:  < ", "Invertir stick derecho:  < ") + std::string(spanish() ? kEs[n] : kEn[n]) + " >";
-     }
--    case Command::fullscreen: return std::string("Full screen: ") + (v.fullscreen ? "on" : "off");
--    case Command::keys: return "Show keys";
--    case Command::change_keys: return "Change keys";
--    case Command::quit: return quit_armed ? "Really quit?  Enter / Cross again" : "Quit the game";
++    }
 +    case Command::keys: return tr("Show keys", "Ver teclas");
 +    case Command::change_keys: return tr("Change keys", "Cambiar teclas");
 +    case Command::quit: return quit_armed ? tr("Really quit?  Enter / Cross again", "¿Salir de verdad?  Enter / X otra vez") : tr("Quit the game", "Salir del juego");
@@ -221,7 +293,7 @@ index 2857114..5ddf914 100644
  int Menu::count() const { return page_ == Page::keys ? key_rows_ + 2 : kEntries; }
  
  void Menu::fit() {
-@@ -241,7 +304,10 @@ Command Menu::choose() {
+@@ -241,7 +362,10 @@ Command Menu::choose() {
  Command Menu::side() const {
      if (page_ == Page::keys) return Command::none;
      const Command c = kCommands[selected_];
@@ -233,7 +305,7 @@ index 2857114..5ddf914 100644
  }
  
  bool Menu::select_at(int x, int y) {
-@@ -263,8 +329,10 @@ bool Menu::select_at(int x, int y) {
+@@ -263,8 +387,10 @@ bool Menu::select_at(int x, int y) {
  }
  
  void Menu::draw_keys(int window_width, int window_height, const Values &values, Picture &out) {
@@ -246,18 +318,54 @@ index 2857114..5ddf914 100644
      key_rows_ = static_cast<int>(values.key_rows.size());
      fit();
      const int n = key_rows_, shown = std::min(n, kVisibleRows);
-@@ -289,8 +357,8 @@ void Menu::draw_keys(int window_width, int window_height, const Values &values,
+@@ -279,21 +405,18 @@ void Menu::draw_keys(int window_width, int window_height, const Values &values,
+     out.y = std::max(0, (window_height - out.height) / 2);
+     out.rgba.assign(static_cast<std::size_t>(out.width) * out.height, kPanel);
+     Canvas c{out};
+-    const int frame = std::max(1, s / 2);
+-    c.fill(0, 0, out.width, frame, kFrame);
+-    c.fill(0, out.height - frame, out.width, frame, kFrame);
+-    c.fill(0, 0, frame, out.height, kFrame);
+-    c.fill(out.width - frame, 0, frame, out.height, kFrame);
++    c.band(0, (pad + 8 + 5) * s, s);
++    c.frame_box(s);
+     const auto fit_text = [](const std::string &t, std::size_t max) { return t.size() <= max ? t : t.substr(0, max - 3) + "..."; };
+     const int text_x = (pad + bar_pad) * s, inner_w = out.width - 2 * pad * s;
      int y = pad * s;
-     c.text(text_x, y, s, kTitleText, kTitle);
+-    c.text(text_x, y, s, kTitleText, kTitle);
++    c.text_shadow(text_x, y, s, kTitleText, kBarText);
      if (n > shown) {
 -        const std::string where = std::to_string(top_ + 1) + "-" + std::to_string(top_ + shown) + " of " + std::to_string(n);
 -        c.text(out.width - text_x - static_cast<int>(where.size()) * 6 * s + s, y, s, where, kDim);
 +        const std::string where = std::to_string(top_ + 1) + "-" + std::to_string(top_ + shown) + tr(" of ", " de ") + std::to_string(n);
-+        c.text(out.width - text_x - width_of(where) * 6 * s + s, y, s, where, kDim);
++        c.text(out.width - text_x - width_of(where) * 6 * s + s, y, s, where, kStar);
      }
      y += 8 * s + 6 * s;
-     c.fill(pad * s, y, inner_w, std::max(1, s / 2), kFrame);
-@@ -315,8 +383,10 @@ void Menu::draw_keys(int window_width, int window_height, const Values &values,
+-    c.fill(pad * s, y, inner_w, std::max(1, s / 2), kFrame);
++    c.dashes(pad * s, y, inner_w, s);
+     y += 6 * s;
+     entry_x_ = out.x + pad * s;
+     entry_w_ = inner_w;
+@@ -301,10 +424,14 @@ void Menu::draw_keys(int window_width, int window_height, const Values &values,
+     rows_y_ = out.y + y;
+     const auto line = [&](int index, const std::string &left, const std::string &right) {
+         const bool lit = index == selected_;
+-        if (lit) c.fill(pad * s, y, inner_w, bar_h * s, kBar);
+-        const std::uint32_t color = lit ? kBarText : kText;
+-        c.text(text_x, y + 2 * s, s, left, color);
+-        if (!right.empty()) c.text(text_x + (label_chars + 1) * 6 * s, y + 2 * s, s, fit_text(right, keys_chars), color);
++        if (lit) c.bar(pad * s, y, inner_w, bar_h * s, s);
++        if (lit) {
++            c.text_shadow(text_x, y + 2 * s, s, left, kBarText);
++            if (!right.empty()) c.text_shadow(text_x + (label_chars + 1) * 6 * s, y + 2 * s, s, fit_text(right, keys_chars), kBarText);
++        } else {
++            c.text(text_x, y + 2 * s, s, left, kText);
++            if (!right.empty()) c.text(text_x + (label_chars + 1) * 6 * s, y + 2 * s, s, fit_text(right, keys_chars), kText);
++        }
+         y += bar_h * s;
+     };
+     for (int r = 0; r < shown; ++r) {
+@@ -315,10 +442,12 @@ void Menu::draw_keys(int window_width, int window_height, const Values &values,
      }
      y += 3 * s;
      footer_y_ = out.y + y;
@@ -268,9 +376,12 @@ index 2857114..5ddf914 100644
 +         "");
 +    line(n + 1, tr("Back", "Volver"), "");
      y += 5 * s;
-     c.fill(pad * s, y, inner_w, std::max(1, s / 2), kFrame);
+-    c.fill(pad * s, y, inner_w, std::max(1, s / 2), kFrame);
++    c.dashes(pad * s, y, inner_w, s);
      y += 6 * s;
-@@ -332,12 +402,13 @@ void Menu::draw(int window_width, int window_height, const Values &values, Pictu
+     c.text(text_x, y, s, fit_text(values.key_note, kKeysPageChars), kTitle);
+     y += 12 * s;
+@@ -332,12 +461,13 @@ void Menu::draw(int window_width, int window_height, const Values &values, Pictu
          draw_keys(window_width, window_height, values, out);
          return;
      }
@@ -287,7 +398,47 @@ index 2857114..5ddf914 100644
      }
      // everything in font pixels first; one font pixel is `s` window pixels, as big as fits in about 80 % of the window
      const int pad = 8, bar_h = 14, bar_pad = 5;
-@@ -380,7 +451,7 @@ void Menu::draw(int window_width, int window_height, const Values &values, Pictu
+@@ -350,15 +480,12 @@ void Menu::draw(int window_width, int window_height, const Values &values, Pictu
+     out.y = std::max(0, (window_height - out.height) / 2);
+     out.rgba.assign(static_cast<std::size_t>(out.width) * out.height, kPanel);
+     Canvas c{out};
+-    const int frame = std::max(1, s / 2);
+-    c.fill(0, 0, out.width, frame, kFrame);
+-    c.fill(0, out.height - frame, out.width, frame, kFrame);
+-    c.fill(0, 0, frame, out.height, kFrame);
+-    c.fill(out.width - frame, 0, frame, out.height, kFrame);
++    c.band(0, (pad + 8 + 5) * s, s);
++    c.frame_box(s);
+     int y = pad * s;
+-    c.text((pad + bar_pad) * s, y, s, kTitleText, kTitle);
++    c.text_shadow((pad + bar_pad) * s, y, s, kTitleText, kBarText);
+     y += 8 * s + 6 * s;
+-    c.fill(pad * s, y, out.width - 2 * pad * s, std::max(1, s / 2), kFrame);
++    c.dashes(pad * s, y, out.width - 2 * pad * s, s);
+     y += 6 * s;
+     entry_x_ = out.x + pad * s;
+     entry_y_ = out.y + y;
+@@ -366,21 +493,22 @@ void Menu::draw(int window_width, int window_height, const Values &values, Pictu
+     entry_h_ = bar_h * s;
+     for (int i = 0; i < kEntries; ++i) {
+         const bool lit = i == selected_;
+-        if (lit) c.fill(pad * s, y, out.width - 2 * pad * s, bar_h * s, kBar);
+-        c.text((pad + bar_pad) * s, y + 3 * s, s, lines[i], lit ? kBarText : kText);
++        if (lit) c.bar(pad * s, y, out.width - 2 * pad * s, bar_h * s, s);
++        if (lit) c.text_shadow((pad + bar_pad) * s, y + 3 * s, s, lines[i], kBarText);
++        else c.text((pad + bar_pad) * s, y + 3 * s, s, lines[i], kText);
+         const std::string key = kKeys[i];
+-        c.text(out.width - (pad + bar_pad) * s - static_cast<int>(key.size()) * 6 * s + s, y + 3 * s, s, key, lit ? kBarDim : kDim);
++        c.text(out.width - (pad + bar_pad) * s - static_cast<int>(key.size()) * 6 * s + s, y + 3 * s, s, key, lit ? kStar : kDim);
+         y += bar_h * s;
+     }
+     y += 5 * s;
+-    c.fill(pad * s, y, out.width - 2 * pad * s, std::max(1, s / 2), kFrame);
++    c.dashes(pad * s, y, out.width - 2 * pad * s, s);
+     y += 6 * s;
+-    c.text((pad + bar_pad) * s, y, s, kHint, kDim);
++    c.text((pad + bar_pad) * s, y, s, kHint, kTitle);
+ }
  
  void Menu::draw_note(int window_width, int window_height, const std::string &text, Picture &out) {
      const int pad = 5;
@@ -296,6 +447,21 @@ index 2857114..5ddf914 100644
      const int s = std::clamp(std::min(window_height / 240, window_width * 9 / 10 / units_w), 1, 6);
      out.width = units_w * s;
      out.height = units_h * s;
+@@ -388,12 +516,8 @@ void Menu::draw_note(int window_width, int window_height, const std::string &tex
+     out.y = std::max(0, window_height / 20);
+     out.rgba.assign(static_cast<std::size_t>(out.width) * out.height, kPanel);
+     Canvas c{out};
+-    const int frame = std::max(1, s / 2);
+-    c.fill(0, 0, out.width, frame, kFrame);
+-    c.fill(0, out.height - frame, out.width, frame, kFrame);
+-    c.fill(0, 0, frame, out.height, kFrame);
+-    c.fill(out.width - frame, 0, frame, out.height, kFrame);
+-    c.text(pad * s, pad * s, s, text, kTitle);
++    c.frame_box(s);
++    c.text_shadow(pad * s, pad * s, s, text, kStar);
+ }
+ 
+ }  // namespace quickmenu
 diff --git a/host/quickmenu.hpp b/host/quickmenu.hpp
 index 0d7f486..9d20480 100644
 --- a/host/quickmenu.hpp
@@ -327,7 +493,7 @@ index 0d7f486..9d20480 100644
      struct KeyRow {
          std::string label, keys;
 diff --git a/host/window.cpp b/host/window.cpp
-index d82a042..9763a13 100644
+index d82a042..2bbe37b 100644
 --- a/host/window.cpp
 +++ b/host/window.cpp
 @@ -152,6 +152,7 @@ bool g_block_input[2] = {};
@@ -427,6 +593,22 @@ index d82a042..9763a13 100644
      g_scale_now = std::clamp(std::atoi(ps2::os::env("PS2_SCALE").c_str()), 1, 4);
      g_scale_next = g_scale_locked ? g_scale_now : (g_keys.scale >= 1 ? g_keys.scale : g_scale_now);
      // the 2D art filter the same way: PS2_SHARP_2D, else the 'sharp_2d' line of keys.ini, else sharp (gpu.cpp reads it at its start)
+@@ -1857,6 +1908,15 @@ bool open_window(bool fullscreen) {
+         std::fprintf(stderr, "SDL: %s\n", SDL_GetError());
+         return false;
+     }
++    // the window's icon (title bar, taskbar): a 32-bit BMP the launcher names in PS2_WINDOW_ICON
++    if (const std::string icon_path = ps2::os::env("PS2_WINDOW_ICON"); !icon_path.empty()) {
++        if (SDL_Surface *icon = SDL_LoadBMP(icon_path.c_str())) {
++            SDL_SetWindowIcon(g_window, icon);
++            SDL_FreeSurface(icon);
++        } else {
++            std::fprintf(stderr, "[window] icon %s: %s\n", icon_path.c_str(), SDL_GetError());
++        }
++    }
+     SDL_ShowWindow(g_window);
+     SDL_RaiseWindow(g_window);
+ #ifdef _WIN32
 diff --git a/recomp/vurecomp_gen.cpp b/recomp/vurecomp_gen.cpp
 index ec6118c..aff8843 100644
 --- a/recomp/vurecomp_gen.cpp
@@ -692,6 +874,65 @@ index f91c5f7..503cd0b 100644
      if (id >= kEventTimer0 && id <= kEventTimer3) return [n = id - kEventTimer0, at] { timer_event(n, at); };
      return [] {};
  }
+diff --git a/runtime/src/iop/cdvd.cpp b/runtime/src/iop/cdvd.cpp
+index cba8cb6..a34888f 100644
+--- a/runtime/src/iop/cdvd.cpp
++++ b/runtime/src/iop/cdvd.cpp
+@@ -75,15 +75,18 @@ bool trace_cd() {
+ 
+ std::uint8_t bcd(int v) { return static_cast<std::uint8_t>(((v / 10) << 4) | (v % 10)); }
+ 
+-void finish_read() {
++// The end of a drive command: sceCdSync waiters go on and the callback of sceCdCallback runs with the command's number (1 read,
++// 7 seek: ps2sdk SCECdFuncRead / SCECdFuncSeek).
++void finish_command(std::uint32_t function) {
+     g_cd.busy = false;
+     g_cd.read_sectors = 0;
+     for (int id : g_cd.sync_waiters)
+         if (Thread *t = thread(id)) wake(*t, 0);
+     if (!g_cd.sync_waiters.empty()) reschedule();
+     g_cd.sync_waiters.clear();
+-    if (g_cd.callback) call_guest(g_cd.callback, 1);
++    if (g_cd.callback) call_guest(g_cd.callback, function);
+ }
++void finish_read() { finish_command(1); }
+ 
+ std::uint64_t read_cycles(std::uint32_t sectors) {
+     return usec_to_cycles(400) + static_cast<std::uint64_t>(sectors) * usec_to_cycles(250);
+@@ -160,7 +163,20 @@ void install_cdvd() {
+         if (g_trace_hle) std::fprintf(stderr, "[cdvd] read lsn %u count %u to 0x%08X\n", arg(c, 0), arg(c, 1), arg(c, 2));
+         c.r[2] = start_read(arg(c, 0), arg(c, 1), arg(c, 2), arg(c, 3), false) ? 1u : 0u;
+     });
+-    def("cdvdman", 7, "sceCdSeek", [](Cpu &c) { c.r[2] = 1; });
++    // sceCdSeek is a drive command like a read: it ends a little later, and then sceCdSync returns and the CD callback runs. Crash
++    // Bandicoot: The Wrath of Cortex's sound streamer (NUSOUND.IRX) seeks and waits for that callback before it reads; with no
++    // callback it waited for ever on its loading screen.
++    register_job(kJobCdSeek, [](const Job &) { finish_command(7); });
++    def("cdvdman", 7, "sceCdSeek", [](Cpu &c) {
++        if (g_cd.busy) { c.r[2] = 0; return; }
++        g_cd.busy = true;
++        g_cd.error = 0;
++        g_cd.read_start = now();
++        g_cd.read_sectors = 0;
++        disc::ready(arg(c, 0), 16);
++        schedule(now() + usec_to_cycles(400), Job{kJobCdSeek, arg(c, 0), 0, 0});
++        c.r[2] = 1;
++    });
+     def("cdvdman", 8, "sceCdGetError", [](Cpu &c) { c.r[2] = g_cd.error; });
+     def("cdvdman", 10, "sceCdSearchFile", [](Cpu &c) {
+         const std::string name = ram_string(arg(c, 1), 256);
+diff --git a/runtime/src/iop/kernel.hpp b/runtime/src/iop/kernel.hpp
+index 207d740..6022cea 100644
+--- a/runtime/src/iop/kernel.hpp
++++ b/runtime/src/iop/kernel.hpp
+@@ -65,6 +65,7 @@ enum JobKind : std::uint32_t {
+     kJobFsvIopRead,
+     kJobSifDmaCallback,
+     kJobSifReply,
++    kJobCdSeek,
+     kJobCount
+ };
+ struct Job {
 diff --git a/runtime/src/kernel.cpp b/runtime/src/kernel.cpp
 index 6561c4d..4cf51d5 100644
 --- a/runtime/src/kernel.cpp

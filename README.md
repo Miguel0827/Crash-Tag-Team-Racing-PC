@@ -7,28 +7,41 @@
 <a href="https://recompstore.com/dev/miguel0827"><picture><source media="(prefers-color-scheme: dark)" srcset="https://recompstore.com/assets/press/verified-light.svg"><img src="https://recompstore.com/assets/press/verified-dark.svg" alt="Verified developer on RecompStore" height="56"></picture></a>
 </p>
 
-**[Download the latest version](https://github.com/Miguel0827/Crash-Tag-Team-Racing-PC/releases/latest)** · [Report a problem](https://github.com/Miguel0827/Crash-Tag-Team-Racing-PC/issues/new/choose)
+**[Download the latest version](https://github.com/Miguel0827/Crash-Tag-Team-Racing-PC/releases/latest)** (Windows `.zip` or Linux `.tar.gz`) · [Report a problem](https://github.com/Miguel0827/Crash-Tag-Team-Racing-PC/issues/new/choose)
 
-Native PC port of *Crash Tag Team Racing* (PlayStation 2) built with [ps2-native-recomp](https://github.com/exoteric33/ps2-native-recomp): the game's own code is translated to C++ and compiled for Windows **on your PC, from your own disc**. This project contains **no game code, no game data and no disc images**.
+Native PC port of *Crash Tag Team Racing* (PlayStation 2) built with [ps2-native-recomp](https://github.com/exoteric33/ps2-native-recomp): the game's own code is translated to C++ and compiled for Windows or Linux **on your PC, from your own disc**. This project contains **no game code, no game data and no disc images**.
 
 *Port nativo para PC de Crash Tag Team Racing (PS2). El juego se convierte en tu PC a partir de tu propia copia. Este proyecto no contiene nada del juego.* (Español abajo.)
 
 ## What you need
 
-- Windows 10/11, 64-bit, and an internet connection for the first install (about 1 GB of tools is downloaded).
+- **Windows** 10/11 64-bit, or **Linux** 64-bit (see [Linux](#linux)), and an internet connection for the first install (on Windows about 1 GB of tools is downloaded).
 - An ISO you made from **your own** Crash Tag Team Racing disc. Supported:
   - **Europe / Australia** — SLES-53439 (English, French, German, Spanish, Italian, Dutch)
   - **USA / Latin America** — SLUS-21191 (English)
-- A graphics card with Vulkan or Direct3D 12.
+- A graphics card with Vulkan (or Direct3D 12 on Windows).
 
-## Use
+## Use (Windows)
 
-1. Download the zip from the [latest release](https://github.com/Miguel0827/Crash-Tag-Team-Racing-PC/releases/latest) and extract it to a short folder **without spaces and outside OneDrive**, for example `C:\Games\CTTR`.
-2. Double-click **`Crash Tag Team Racing PC Port.bat`**.
-3. Click **Import ISO...** and choose your ISO. The installer downloads the converter, applies this project's fixes and converts the game. It takes several minutes the first time.
-4. Choose your settings and press **PLAY**. The launcher remembers them.
+1. Download the Windows zip from the [latest release](https://github.com/Miguel0827/Crash-Tag-Team-Racing-PC/releases/latest) and extract it to a short folder **without spaces and outside OneDrive**, for example `C:\Games\CTTR`.
+2. Open **`Crash Tag Team Racing PC - Config.exe`** (installing and settings).
+3. Click **Import ISO...** and choose your ISO. The installer downloads the converter, applies this project's fixes and converts the game. It takes several minutes the first time. At the end it offers a desktop shortcut.
+4. Choose your settings and press **PLAY**. Once installed, **`Crash Tag Team Racing PC.exe`** appears next to it and goes straight into the game.
 
-In the game, **F1** opens the quick menu (resolution, picture, vertical sync, camera, keys, quick save/load).
+In the game, **F1** opens the quick menu (resolution, picture, vertical sync, keys, quick save/load).
+
+## Linux
+
+Download the Linux `.tar.gz` and extract it (`tar xzf ...`). It works like on Windows, with windows (zenity) on a desktop:
+
+1. Install what the build needs, once:
+   - Debian / Ubuntu / Mint: `sudo apt install clang libc++-dev libc++abi-dev cmake ninja-build python3 libsdl2-dev git curl unzip pkg-config zenity`
+   - Fedora: `sudo dnf install clang libcxx-devel libcxxabi-devel cmake ninja-build python3 SDL2-devel git curl unzip pkgconf zenity`
+   - Arch: `sudo pacman -S clang libc++ cmake ninja python sdl2 git curl unzip pkgconf zenity`
+2. Run **`linux/config.sh`** (the settings window). The first time it asks for your ISO and installs the game with a progress bar; at the end it offers a desktop shortcut.
+3. From then on, **Crash Tag Team Racing** in your applications menu (or `linux/play.sh`) goes straight into the game; **Crash Tag Team Racing - Config** changes the settings.
+
+From a terminal: `./linux/install.sh your-game.iso`, then `./linux/play.sh` (options `--scale 1-4`, `--fps`, `--psp`, `--window`, `--lang 1-6`; see `--help`).
 
 ## What this project adds
 
@@ -37,19 +50,24 @@ Fixes to ps2-native-recomp (`patches/cttr-fixes.patch`, made for commit `b1af723
 - **Freeze after the intro film fixed**: a lost wake-up in the drawing queue on Windows (and messages too large for the queue are split).
 - **Vector unit programs no longer recompiled thousands of times**: the game rewrites the LOI constants inside its VU1 microcode every frame; they are now read at run time and ignored when a program is recognised. CPU use drops from ~95 % to normal.
 - **Title screen and menus 9x lighter** (`PS2_DMA_TIME`): GIF transfers take the time the console would take (PATH3 waits behind VIF1's geometry), so the game no longer draws the same scene 18 times per frame.
-- **Quick menu (F1)** in English and Spanish (accented letters added to the font), **vertical sync** option, **invert right stick** option.
+- **Quick menu (F1)** in English and Spanish (accented letters added to the font), in a purple pixel-art style, with a **vertical sync** option. The right stick's left-right comes the right way round by default.
+- The game's window carries the game's icon.
 
-The launcher (`tools/Launcher.ps1`) and installer (`tools/Instalar.ps1`) are in English, Spanish, French, German, Italian and Portuguese.
+The launcher (`tools/Launcher.ps1`) and installer (`tools/Instalar.ps1`) are in English, Spanish, French, German, Italian and Portuguese; the Linux windows (`linux/`) in English and Spanish. The converter is downloaded from this project's own copy ([Miguel0827/ps2-native-recomp](https://github.com/Miguel0827/ps2-native-recomp)), with the original repository as a fallback.
 
 Optional patches from the PCSX2 community (downloaded during install from [PCSX2/pcsx2_patches](https://github.com/PCSX2/pcsx2_patches), not included here): 16:9 widescreen (Arapapa, nemesis2000, PeterDelta), 50/60 FPS (PeterDelta / asasega), PSP content unlock (CRASHARKI).
 
-**ReShade** (optional, Vulkan) is not included: install it yourself from [reshade.me](https://reshade.me) for `ps2run.exe` if you want SMAA or sharpening.
+**ReShade** (optional, Vulkan, Windows) is not included: install it yourself from [reshade.me](https://reshade.me) for `ps2run.exe` if you want SMAA or sharpening.
+
+## Coming next
+
+- **Online races (work in progress):** racing other players over the internet, with quick matches against random players. Each player still needs their own disc of the same version.
 
 ## Where things go
 
 Everything stays in this folder: the installer creates **`engine/`** next to `tools/` with the converter, its tools (~1 GB) and your converted games, saves and settings. `engine/` is listed in `.gitignore`; delete it before sharing or uploading this folder.
 
-Your saves are in `engine\games\cttr_eu\memcard.ps2` (Europe) or `engine\games\cttr_us\memcard.ps2` (USA). Importing the ISO again keeps them, and the launcher's **Delete** button asks whether to keep them.
+Your saves: the **`Partidas`** folder next to the programs leads to them (`memcard.ps2` is the memory card, `states` the quick saves); the note inside says which file is which. Importing the ISO again keeps them, and the launcher's **Delete** button asks whether to keep them.
 
 ## Troubleshooting
 
@@ -58,7 +76,7 @@ Your saves are in `engine\games\cttr_eu\memcard.ps2` (Europe) or `engine\games\c
 - **The installation fails while building**: some of the build tools do not handle spaces in the folder path. Move this folder to a short path without spaces and outside OneDrive (for example `C:\Games\CTTR`) and import the ISO again. Each import starts clean and keeps your saves.
 - **The game is slow or the picture tears**: lower **Internal resolution**, switch **Vertical sync**, or try the other **Graphics API** (Vulkan / Direct3D 12).
 - **Double FPS or PSP content is greyed out**: the PCSX2 patch file for your disc version has no such patch.
-- **Installer log**: `%TEMP%\cttr-pc-install.log`. Attach it when you report a problem.
+- **Installer log**: `%TEMP%\cttr-pc-install.log` on Windows, `/tmp/cttr-pc-install.log` on Linux. Attach it when you report a problem.
 
 ## Do not share
 
@@ -68,7 +86,7 @@ Do not share ISOs, the converted program (`ps2run.exe` and the generated C++), o
 
 Only the **official releases** are supported: the [Releases](https://github.com/Miguel0827/Crash-Tag-Team-Racing-PC/releases) page and RecompLauncher. Other branches (such as `multiplayer`) are unfinished work in progress: please do not report problems from them.
 
-[Open a bug report](https://github.com/Miguel0827/Crash-Tag-Team-Racing-PC/issues/new/choose) and say which disc version you have and what graphics card you use. If the installation failed, attach `%TEMP%\cttr-pc-install.log`.
+[Open a bug report](https://github.com/Miguel0827/Crash-Tag-Team-Racing-PC/issues/new/choose) and say which disc version you have, Windows or Linux, and what graphics card you use. If the installation failed, attach the installer log.
 
 ## Credits and licences
 
@@ -80,16 +98,22 @@ Only the **official releases** are supported: the [Releases](https://github.com/
 
 ## Español
 
-1. Descarga el zip de la [última versión](https://github.com/Miguel0827/Crash-Tag-Team-Racing-PC/releases/latest) y descomprímelo en una carpeta corta, **sin espacios y fuera de OneDrive**, por ejemplo `C:\Juegos\CTTR`.
-2. Abre **`Crash Tag Team Racing PC Port.bat`**.
-3. Pulsa **Importar ISO...** y elige la ISO de **tu propio disco** (Europa SLES-53439 o USA/Latinoamérica SLUS-21191). La primera vez tarda varios minutos: descarga el convertidor, aplica los arreglos de este proyecto y convierte el juego.
-4. Elige la configuración y pulsa **JUGAR**.
+**Windows:**
+
+1. Descarga el zip de Windows de la [última versión](https://github.com/Miguel0827/Crash-Tag-Team-Racing-PC/releases/latest) y descomprímelo en una carpeta corta, **sin espacios y fuera de OneDrive**, por ejemplo `C:\Juegos\CTTR`.
+2. Abre **`Crash Tag Team Racing PC - Config.exe`** (instalar y configurar).
+3. Pulsa **Importar ISO...** y elige la ISO de **tu propio disco** (Europa SLES-53439 o USA/Latinoamérica SLUS-21191). La primera vez tarda varios minutos: descarga el convertidor, aplica los arreglos de este proyecto y convierte el juego. Al terminar ofrece un acceso directo en el escritorio.
+4. Elige la configuración y pulsa **JUGAR**. Ya instalado, aparece **`Crash Tag Team Racing PC.exe`**, que abre el juego directamente.
+
+**Linux:** descarga el `.tar.gz`, descomprímelo, instala lo necesario (comando de arriba, sección *Linux*) y abre **`linux/config.sh`**: pide tu ISO, instala el juego con barra de progreso y ofrece un acceso directo. Después el juego aparece en tu menú de aplicaciones como **Crash Tag Team Racing**.
 
 En el juego, **F1** abre el menú rápido. La versión europea trae español; la de USA solo inglés.
 
-Todo queda en esta carpeta: el instalador crea **`engine`** con el convertidor, sus herramientas y tus juegos convertidos, partidas y configuración. Bórrala antes de compartir o subir la carpeta. Tus partidas están en `engine\games\cttr_eu\memcard.ps2` (Europa) o `engine\games\cttr_us\memcard.ps2` (USA).
+Todo queda en esta carpeta: el instalador crea **`engine`** con el convertidor, sus herramientas y tus juegos convertidos, partidas y configuración. Bórrala antes de compartir o subir la carpeta. Tus partidas: la carpeta **`Partidas`**, junto a los programas, lleva a ellas.
 
-**Si algo falla:** si la instalación falla al compilar, mueve la carpeta a una ruta corta sin espacios y vuelve a importar la ISO (tus partidas se conservan). Si el juego va lento, baja la **Resolución interna** o prueba la otra **API gráfica**. El registro de la instalación está en `%TEMP%\cttr-pc-install.log`.
+**Próximamente:** carreras online contra otros jugadores (en desarrollo), con partidas rápidas contra jugadores al azar. Cada jugador necesitará su propio disco de la misma versión.
+
+**Si algo falla:** si la instalación falla al compilar, mueve la carpeta a una ruta corta sin espacios y vuelve a importar la ISO (tus partidas se conservan). Si el juego va lento, baja la **Resolución interna** o prueba la otra **API gráfica**. El registro de la instalación está en `%TEMP%\cttr-pc-install.log` (Windows) o `/tmp/cttr-pc-install.log` (Linux).
 
 No compartas ISOs ni el juego convertido: contienen el juego, que es de sus dueños.
 

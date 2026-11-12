@@ -338,7 +338,7 @@ $strip = New-Object Windows.Forms.PictureBox; $strip.SetBounds(0, $script:y, 520
 $sb = New-Object Drawing.Bitmap 520, 4; $sg = [Drawing.Graphics]::FromImage($sb)
 for ($x = 0; $x -lt 520; $x += 8) { $sg.FillRectangle((New-Object Drawing.SolidBrush (Mix $Theme.deep $Theme.purple ([Math]::Floor($x * 8 / 520) / 8))), $x, 0, 8, 4) }
 $sg.Dispose(); $strip.Image = $sb; $form.Controls.Add($strip)
-$Version = 'v1.1.0'   # this package's release (v1.0.0 was the first)
+$Version = 'v1.1.1'   # this package's release (v1.0.0 was the first)
 $by = New-Object Windows.Forms.LinkLabel; $by.Text = "By NyxBorn  ·  github.com/Miguel0827  ·  $Version"; $by.Font = New-Object Drawing.Font('Segoe UI Semibold', 9)
 $by.LinkArea = New-Object Windows.Forms.LinkArea(15, 21); $by.ForeColor = $Theme.lilac; $by.LinkColor = $Theme.muted; $by.ActiveLinkColor = $Theme.pale; $by.VisitedLinkColor = $Theme.muted; $by.LinkBehavior = 'HoverUnderline'
 $by.AutoSize = $false; $by.TextAlign = 'MiddleCenter'; $by.SetBounds(0, $script:y + 8, 520, 20); $form.Controls.Add($by)

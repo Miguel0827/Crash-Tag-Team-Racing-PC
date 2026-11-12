@@ -49,7 +49,7 @@ set_ini right_invert x
 # the patches of this run: wide screen always, the others when chosen
 {
   for f in ws $([ "$fps" = 1 ] && echo fps) $([ "$psp" = 1 ] && echo psp); do
-    [ -s "$game/patchsets/$f.txt" ] && cat "$game/patchsets/$f.txt" && echo
+    if [ -s "$game/patchsets/$f.txt" ]; then cat "$game/patchsets/$f.txt"; echo; fi   # (a disc may lack the FPS or PSP patch)
   done
 } | sed '/^$/d' > "$game/patches_run.txt"
 

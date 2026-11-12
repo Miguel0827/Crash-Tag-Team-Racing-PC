@@ -9,6 +9,11 @@ Add-Type -Namespace Native -Name Con -MemberDefinition '[DllImport("kernel32.dll
 [void][Native.Con]::ShowWindow([Native.Con]::GetConsoleWindow(), 0)
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 [System.Windows.Forms.Application]::EnableVisualStyles()
+# The game inherits this: no Windows "has stopped working" box when it crashes; the launcher explains it in its own window.
+Add-Type -Namespace Native -Name Err -MemberDefinition '[DllImport("kernel32.dll")] public static extern uint SetErrorMode(uint mode);'
+[void][Native.Err]::SetErrorMode(0x8003)
+$Version = 'v1.2.0'   # this package's release (in the footer and in error reports)
+$IssuesUrl = 'https://github.com/Miguel0827/Crash-Tag-Team-Racing-PC'
 
 $Here    = Split-Path -Parent $MyInvocation.MyCommand.Path
 # the converter and the converted games live in the "engine" folder next to tools\, written without spaces (the 8.3 name)
@@ -144,9 +149,68 @@ $cfg = [ordered]@{ ui = 'es'; version = ''; game = 3; api = 'vulkan'; reshade = 
 if (Test-Path $CfgFile) { try { $j = Get-Content $CfgFile -Raw | ConvertFrom-Json; foreach ($p in $j.PSObject.Properties) { $cfg[$p.Name] = $p.Value } } catch {} }
 $Games = Get-Games
 
+# ---------------------------------------------------------------- this PC
+# Its graphics card (the one with the most video memory, a separate card before one built into the processor), processor threads,
+# memory and Windows: for the settings of a first start and for error reports. Video memory comes from the display drivers'
+# registry keys (Win32_VideoController stops at 4 GB).
+function Get-PcInfo {
+    $i = [ordered]@{ tier = 'mid'; gpu = ''; vram = 0.0; integrated = $false; intel = $false; cores = [Environment]::ProcessorCount; ram = 0.0; cpu = ''; os = ''; gpus = @() }
+    try { $i.ram = [Math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 1) } catch {}
+    try { $i.cpu = ([string](Get-CimInstance Win32_Processor | Select-Object -First 1).Name).Trim() } catch {}
+    try { $o = Get-CimInstance Win32_OperatingSystem; $i.os = "$($o.Caption) ($($o.Version))" } catch {}
+    $mem = @{}
+    try {
+        Get-ChildItem 'HKLM:\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}' -ErrorAction Stop | ForEach-Object {
+            try {
+                $p = Get-ItemProperty $_.PSPath -ErrorAction Stop
+                $q = $p.'HardwareInformation.qwMemorySize'
+                if (-not $q) { $q = $p.'HardwareInformation.MemorySize'; if ($q -is [byte[]]) { $q = [BitConverter]::ToUInt32($q, 0) } }
+                if ($p.DriverDesc -and $q) { $mem[[string]$p.DriverDesc] = [double]$q }
+            } catch {}
+        }
+    } catch {}
+    $best = $null; $bestScore = -1.0
+    try {
+        foreach ($v in @(Get-CimInstance Win32_VideoController)) {
+            $name = [string]$v.Name
+            if (-not $name -or $name -match 'Basic Display|Basic Render|Remote|Virtual|Parsec|Meta Virtual|Mirage') { continue }
+            $vram = if ($mem.ContainsKey($name)) { $mem[$name] } else { [double]$v.AdapterRAM }
+            $integ = ($name -match 'Intel') -or ($name -match 'Radeon\(TM\) Graphics|Radeon Graphics|Vega \d+ Graphics|Radeon \d+M Graphics')
+            $i.gpus += "$name (driver $($v.DriverVersion), $([Math]::Round($vram / 1GB, 1)) GB)"
+            $score = $vram + $(if ($integ) { 0 } else { 64GB })
+            if ($score -gt $bestScore) { $bestScore = $score; $best = @{ name = $name; vram = $vram; integ = $integ } }
+        }
+    } catch {}
+    if ($best) { $i.gpu = $best.name; $i.vram = [Math]::Round($best.vram / 1GB, 1); $i.integrated = $best.integ; $i.intel = $best.name -match 'Intel' }
+    # modest: a graphics chip in the processor, a small card, few threads or little memory; powerful: a card with 6 GB or more
+    if ($i.integrated -or $i.vram -lt 3 -or $i.cores -lt 4 -or ($i.ram -gt 0 -and $i.ram -lt 7.5)) { $i.tier = 'low' }
+    elseif ($i.vram -ge 6 -and $i.cores -ge 6 -and $i.ram -ge 14) { $i.tier = 'high' }
+    $i
+}
+$PcInfo = Get-PcInfo
+# per kind of PC: the inner resolution, and the plainest picture (no edge smoothing pass) on a modest one
+$DefaultScale = @{ low = 1; mid = 2; high = 4 }[$PcInfo.tier]
+$DefaultLook = $(if ($PcInfo.tier -eq 'low') { 1 } else { 0 })
+# A first start (no saved settings yet): full screen, the language of Windows for the launcher, the F1 menu and the game, and
+# Direct3D 12 on an Intel graphics chip (their Vulkan drivers are the less reliable ones).
+$FirstRun = -not (Test-Path $CfgFile)
+if ($FirstRun) {
+    $cul = (Get-UICulture).TwoLetterISOLanguageName
+    $cfg.ui = $(if (@($UiLangs | ForEach-Object { $_[0] }) -contains $cul) { $cul } else { 'en' })
+    $cfg.game = $(switch ($cul) { 'es' { 3 } 'fr' { 2 } 'de' { 4 } 'it' { 5 } 'nl' { 6 } default { 1 } })
+    $cfg.full = $true
+    if ($PcInfo.intel -and $PcInfo.integrated) { $cfg.api = 'dx12' }
+    $cfg.fps = $PcInfo.tier -ne 'low'   # 50/60 FPS on a medium or powerful PC (it doubles the game's work)
+}
+function Save-Cfg { [IO.File]::WriteAllText($CfgFile, ($cfg | ConvertTo-Json), (New-Object Text.UTF8Encoding $false)) }
+
 # Starts game $g with the saved settings ($cfg and its keys.ini): the Play button after saving them, and -Play on its own
 function Start-Game($g) {
     $gameDir = Join-Path $Root "games\$($g.name)"
+    $keys = Join-Path $gameDir 'keys.ini'; $have = Read-Ini $keys; $add = @{}
+    if (-not $have.scale) { $add.scale = $DefaultScale }
+    if (-not $have.look) { $add.look = $Looks[$DefaultLook][0] }
+    if ($add.Count) { Set-IniLines $keys $add }
     Set-IniLines (Join-Path $gameDir 'keys.ini') @{ right_invert = 'x' }   # the right stick's left-right is the wrong way round in this game without it
     # the patches of this run: wide screen always (it is in the converted program), the others as chosen and when the disc has them
     $sets = Join-Path $gameDir 'patchsets'
@@ -167,7 +231,8 @@ function Start-Game($g) {
     if ($cfg.api -ne 'vulkan' -or -not $cfg.reshade) { $ev['DISABLE_VK_LAYER_reshade_1'] = '1' }
     $ev['PS2_DMA_TIME'] = '120,16'   # the title and menus: GIF transfers take the console's time (always on)
     $icon = Join-Path $Here 'starter\icon.bmp'; if (Test-Path $icon) { $ev['PS2_WINDOW_ICON'] = $icon }   # the Wumpa on the game's window
-    [void][Diagnostics.Process]::Start($psi)
+    $script:GameStarted = Get-Date
+    [Diagnostics.Process]::Start($psi)
 }
 # "Partidas" next to the programs: a link per installed version to the folder that holds its saves (memory card, quick saves, backups),
 # and a note on which file is which. A link (junction) needs no administrator; deleting it leaves the saves where they are.
@@ -215,12 +280,112 @@ function Update-GameExe {
         }
     } catch {}
 }
+# ---------------------------------------------------------------- when the game closes with an error
+$CrashTexts = @{
+ es = @{ title = 'Lo sentimos'; head = 'El juego se cerró por un error'; body = "No es culpa tuya. Este informe dice qué pasó y en qué PC: envíalo y lo arreglo en la próxima versión."
+         copy = 'Copiar informe'; send = 'Reportar en GitHub'; safe = 'Probar ajustes seguros'; close = 'Cerrar'; copied = 'Copiado'; saved = 'Informe guardado en:'
+         safedone = 'Resolución 1x, imagen simple y la otra API gráfica: el juego se abre otra vez con estos ajustes.' }
+ en = @{ title = 'Sorry'; head = 'The game closed because of an error'; body = "It is not your fault. This report says what happened and on what PC: send it and I will fix it in the next version."
+         copy = 'Copy report'; send = 'Report on GitHub'; safe = 'Try safe settings'; close = 'Close'; copied = 'Copied'; saved = 'Report saved to:'
+         safedone = 'Resolution 1x, the plain picture and the other graphics API: the game starts again with these settings.' }
+}
+# (its own button style: the window can open before the settings window's functions are defined, from the game .exe)
+function Crash-Button($b, [bool]$main) {
+    $b.FlatStyle = 'Flat'; $b.Cursor = [Windows.Forms.Cursors]::Hand
+    if ($main) { $b.BackColor = $Theme.purple; $b.ForeColor = [Drawing.Color]::White; $b.FlatAppearance.BorderSize = 0 }
+    else { $b.BackColor = $Theme.panel; $b.ForeColor = $Theme.pale; $b.FlatAppearance.BorderColor = $Theme.line }
+}
+function Crash-Text { $k = $(if ($cfg.ui -eq 'es') { 'es' } else { 'en' }); $CrashTexts[$k] }
+$ExitMeaning = @{ 0xC0000005 = 'access violation'; 0xC0000409 = 'fail-fast / stack buffer overrun (often an uncaught C++ exception)'; 0x20474343 = 'uncaught C++ exception'
+                  0xE06D7363 = 'uncaught C++ exception'; 0xC0000135 = 'a DLL is missing'; 0xC000001D = 'illegal instruction (processor too old?)'; 0xC00000FD = 'stack overflow'; 3 = 'abort()' }
+# Waits for the game. A crash (exit code not 0), or a log that ends in anything but a window closed or Quit from the F1 menu (or no
+# end at all), opens the report window.
+function Watch-Game($p, $g) {
+    if (-not $p) { return }
+    $p.WaitForExit()
+    $code = $p.ExitCode
+    $logDir = Join-Path $Root "games\$($g.name)\logs"
+    $log = Get-ChildItem $logDir -Filter 'ps2run_*.log' -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -ge $script:GameStarted.AddSeconds(-5) } | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    $lines = @(); if ($log) { try { $lines = @(Get-Content $log.FullName -ErrorAction Stop) } catch {} }
+    $stop = ($lines | Where-Object { $_ -match '^\[ee\] stopped after' } | Select-Object -Last 1)
+    $reason = if ($stop -match ':\s*(.+)$') { $Matches[1] } else { '' }
+    if ($code -eq 0 -and ($reason -match 'window closed|quit from the quick menu' -or -not $log)) { return }
+    Show-CrashReport $g $code $reason $lines $log
+}
+function Show-CrashReport($g, [int]$code, [string]$reason, $lines, $log) {
+    $x = Crash-Text
+    $hex = '0x{0:X8}' -f $code
+    $meaning = if ($ExitMeaning.ContainsKey($code)) { $ExitMeaning[$code] } elseif ($code -eq 0) { 'the game stopped itself' } else { 'unknown' }
+    $ini = Read-Ini (Join-Path $Root "games\$($g.name)\keys.ini")
+    $tail = @($lines | Where-Object { $_ -notmatch '^\[(fileio|cdvdfsv|iop-io)\]|^\[iop\] (thread|module)' } | Select-Object -Last 40)
+    $report = @(
+        "$($x.head) - $(($Texts['en']).title) $Version", '',
+        "Game: $($g.name) ($($g.elf), $($g.region))",
+        "Exit code: $hex ($meaning)",
+        "Stopped: $(if ($reason) { $reason } else { 'no end line in the log' })",
+        "Settings: scale $($ini.scale), look $($ini.look), vsync $($ini.vsync), API $($cfg.api), full screen $($cfg.full)",
+        "PC: $($PcInfo.os); $($PcInfo.cpu) ($($PcInfo.cores) threads); $($PcInfo.ram) GB RAM; kind $($PcInfo.tier)",
+        "Graphics: $($PcInfo.gpus -join '; ')",
+        "Log: $(if ($log) { $log.FullName } else { 'none' })", '',
+        '--- last lines of the log ---') + $tail
+    $text = $report -join "`r`n"
+    # a copy next to the programs, to attach to a report
+    $saved = ''
+    try {
+        $dir = Join-Path (Split-Path -Parent $Here) 'Informes de error'
+        New-Item -ItemType Directory -Force $dir | Out-Null
+        $saved = Join-Path $dir ("error-{0:yyyy-MM-dd_HH-mm-ss}.txt" -f (Get-Date))
+        [IO.File]::WriteAllText($saved, $text, (New-Object Text.UTF8Encoding $true))
+    } catch { $saved = '' }
+
+    $d = New-Object Windows.Forms.Form; $d.Text = $x.title; $d.StartPosition = 'CenterScreen'; $d.FormBorderStyle = 'FixedDialog'; $d.TopMost = $true
+    $d.MaximizeBox = $false; $d.MinimizeBox = $false; $d.BackColor = $Theme.bg; $d.Font = New-Object Drawing.Font('Segoe UI', 10); $d.ClientSize = New-Object Drawing.Size(620, 470)
+    $ico = Join-Path $Here 'starter\icon.ico'; if (Test-Path $ico) { try { $d.Icon = New-Object Drawing.Icon $ico } catch {} }
+    $band = New-Object Windows.Forms.PictureBox; $band.SetBounds(0, 0, 620, 8)
+    $bb = New-Object Drawing.Bitmap 620, 8; $bg = [Drawing.Graphics]::FromImage($bb)
+    for ($i = 0; $i -lt 620; $i += 8) { $k = [Math]::Floor($i * 8 / 620) / 8; $c = [Drawing.Color]::FromArgb([int]($Theme.deep.R + ($Theme.purple.R - $Theme.deep.R) * $k), [int]($Theme.deep.G + ($Theme.purple.G - $Theme.deep.G) * $k), [int]($Theme.deep.B + ($Theme.purple.B - $Theme.deep.B) * $k)); $bg.FillRectangle((New-Object Drawing.SolidBrush $c), $i, 0, 8, 8) }
+    $bg.Dispose(); $band.Image = $bb; $d.Controls.Add($band)
+    $h = New-Object Windows.Forms.Label; $h.Text = $x.head; $h.SetBounds(20, 20, 580, 28); $h.Font = New-Object Drawing.Font('Segoe UI Semibold', 13); $h.ForeColor = $Theme.lilac; $d.Controls.Add($h)
+    $b = New-Object Windows.Forms.Label; $b.Text = $x.body; $b.SetBounds(20, 52, 580, 44); $b.ForeColor = $Theme.pale; $d.Controls.Add($b)
+    $box = New-Object Windows.Forms.TextBox; $box.Multiline = $true; $box.ReadOnly = $true; $box.ScrollBars = 'Both'; $box.WordWrap = $false
+    $box.SetBounds(20, 100, 580, 270); $box.BackColor = $Theme.panel; $box.ForeColor = $Theme.pale; $box.BorderStyle = 'FixedSingle'; $box.Font = New-Object Drawing.Font('Consolas', 8.5); $box.Text = $text; $d.Controls.Add($box)
+    $sv = New-Object Windows.Forms.Label; $sv.SetBounds(20, 372, 580, 34); $sv.ForeColor = $Theme.muted; $sv.Font = New-Object Drawing.Font('Segoe UI', 8.5)
+    if ($saved) { $sv.Text = "$($x.saved) $saved" }; $d.Controls.Add($sv)
+    $bCopy = New-Object Windows.Forms.Button; $bCopy.Text = $x.copy; $bCopy.SetBounds(20, 410, 130, 36); Crash-Button $bCopy $false; $d.Controls.Add($bCopy)
+    $bSend = New-Object Windows.Forms.Button; $bSend.Text = $x.send; $bSend.SetBounds(158, 410, 160, 36); Crash-Button $bSend $true; $d.Controls.Add($bSend)
+    $bSafe = New-Object Windows.Forms.Button; $bSafe.Text = $x.safe; $bSafe.SetBounds(326, 410, 170, 36); Crash-Button $bSafe $false; $d.Controls.Add($bSafe)
+    $bClose = New-Object Windows.Forms.Button; $bClose.Text = $x.close; $bClose.SetBounds(504, 410, 96, 36); Crash-Button $bClose $false; $bClose.ForeColor = $Theme.muted; $d.Controls.Add($bClose)
+    $bCopy.Add_Click({ [Windows.Forms.Clipboard]::SetText($text); $bCopy.Text = (Crash-Text).copied })
+    $bSend.Add_Click({
+        # GitHub's new issue page with the report filled in (the log's last lines cut to keep the address short; the saved file has them all)
+        $body = ($report | Select-Object -First 12) -join "`n"
+        $fence = ([string][char]96) * 3
+        $body += "`n`n" + $fence + "`n" + (($tail | Select-Object -Last 25) -join "`n") + "`n" + $fence + "`n"
+        $url = "$IssuesUrl/issues/new?title=" + [Uri]::EscapeDataString("Game closed with an error ($hex)") + '&body=' + [Uri]::EscapeDataString($body)
+        if ($url.Length -gt 7500) { $url = $url.Substring(0, 7500) }
+        Start-Process $url
+    })
+    $script:retrySafe = $false
+    $bSafe.Add_Click({
+        $keysFile = Join-Path $Root "games\$($g.name)\keys.ini"
+        Set-IniLines $keysFile @{ scale = 1; look = 'sharp' }
+        $cfg.api = $(if ($cfg.api -eq 'vulkan') { 'dx12' } else { 'vulkan' }); Save-Cfg
+        [void][Windows.Forms.MessageBox]::Show((Crash-Text).safedone, (Crash-Text).title, 'OK', 'Information')
+        $script:retrySafe = $true; $d.Close()
+    })
+    $bClose.Add_Click({ $d.Close() })
+    $d.Add_Shown({ $box.SelectionStart = 0; $box.SelectionLength = 0; $bSend.Focus() })
+    [void]$d.ShowDialog(); $d.Dispose()
+    if ($script:retrySafe) { $p2 = Start-Game $g; Watch-Game $p2 $g }
+}
 Update-SavesFolder
 Update-GameExe
 if ($Play -and $Games.Count -gt 0) {
     $g = @($Games | Where-Object { $_.name -eq [string]$cfg.version })[0]
     if (-not $g) { $g = $Games[0] }
-    Start-Game $g
+    if ($FirstRun) { Save-Cfg }
+    $p = Start-Game $g
+    Watch-Game $p $g
     exit 0
 }
 
@@ -338,7 +503,6 @@ $strip = New-Object Windows.Forms.PictureBox; $strip.SetBounds(0, $script:y, 520
 $sb = New-Object Drawing.Bitmap 520, 4; $sg = [Drawing.Graphics]::FromImage($sb)
 for ($x = 0; $x -lt 520; $x += 8) { $sg.FillRectangle((New-Object Drawing.SolidBrush (Mix $Theme.deep $Theme.purple ([Math]::Floor($x * 8 / 520) / 8))), $x, 0, 8, 4) }
 $sg.Dispose(); $strip.Image = $sb; $form.Controls.Add($strip)
-$Version = 'v1.1.2'   # this package's release (v1.0.0 was the first)
 $by = New-Object Windows.Forms.LinkLabel; $by.Text = "By NyxBorn  ·  github.com/Miguel0827  ·  $Version"; $by.Font = New-Object Drawing.Font('Segoe UI Semibold', 9)
 $by.LinkArea = New-Object Windows.Forms.LinkArea(15, 21); $by.ForeColor = $Theme.lilac; $by.LinkColor = $Theme.muted; $by.ActiveLinkColor = $Theme.pale; $by.VisitedLinkColor = $Theme.muted; $by.LinkBehavior = 'HoverUnderline'
 $by.AutoSize = $false; $by.TextAlign = 'MiddleCenter'; $by.SetBounds(0, $script:y + 8, 520, 20); $form.Controls.Add($by)
@@ -393,8 +557,8 @@ function Load-Game {
     Relayout ($Games.Count -gt 1) (@($g.languages).Count -gt 1)
 
     $ini = Read-Ini (Join-Path $Root "games\$($g.name)\keys.ini")
-    $sc = 2; if ($ini.scale -match '^[1-4]$') { $sc = [int]$ini.scale }; $cScale.SelectedIndex = $sc - 1
-    $lk = 0; if ($ini.look) { $i = [Array]::IndexOf(@($Looks | ForEach-Object { $_[0] -replace '_', '' }), ($ini.look -replace '[ _]', '').ToLower()); if ($i -ge 0) { $lk = $i } }; $cLook.SelectedIndex = $lk
+    $sc = $DefaultScale; if ($ini.scale -match '^[1-4]$') { $sc = [int]$ini.scale }; $cScale.SelectedIndex = $sc - 1
+    $lk = $DefaultLook; if ($ini.look) { $i = [Array]::IndexOf(@($Looks | ForEach-Object { $_[0] -replace '_', '' }), ($ini.look -replace '[ _]', '').ToLower()); if ($i -ge 0) { $lk = $i } }; $cLook.SelectedIndex = $lk
     $kVsync.Checked = $(if ($ini.vsync) { $ini.vsync -match '^(on|1|yes)$' } else { $true })
     $kFps.Enabled = (Get-Item (Join-Path $Root "games\$($g.name)\patchsets\fps.txt") -ErrorAction SilentlyContinue).Length -gt 0
     $kPsp.Enabled = (Get-Item (Join-Path $Root "games\$($g.name)\patchsets\psp.txt") -ErrorAction SilentlyContinue).Length -gt 0
@@ -567,8 +731,14 @@ $bPlay.Add_Click({
     $cfg.api = $(if ($cApi.SelectedIndex -eq 1) { 'dx12' } else { 'vulkan' })
     $cfg.reshade = $kReshade.Checked; $cfg.fps = $kFps.Checked; $cfg.psp = $kPsp.Checked; $cfg.full = $kFull.Checked
     [IO.File]::WriteAllText($CfgFile, ($cfg | ConvertTo-Json), (New-Object Text.UTF8Encoding $false))
-    Start-Game $g
+    $form.Hide()
+    $p = Start-Game $g
+    Watch-Game $p $g
     $form.Close()
 })
 
+if ($FirstRun -and (Current-Game)) {
+    $kind = @{ low = @('PC modesto', 'modest PC'); mid = @('PC medio', 'medium PC'); high = @('PC potente', 'powerful PC') }[$PcInfo.tier]
+    $note.Text = $(if ($cfg.ui -eq 'es') { "Ajustes elegidos para tu PC: $($kind[0]) ($($DefaultScale)x)" } else { "Settings chosen for your PC: $($kind[1]) ($($DefaultScale)x)" })
+}
 [void]$form.ShowDialog()

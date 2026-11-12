@@ -128,6 +128,13 @@ $portArgs = @((PosixPath (Join-Path $Root 'scripts\port.sh')), $name, (PosixPath
 if ($wsSection) { $portArgs += @('--pnach', (PosixPath $pnachFile), '--pnach-section', $wsSection) }
 Run $bash @portArgs
 if ($LASTEXITCODE -ne 0) { throw "port.sh falló ($LASTEXITCODE)" }
+# The game reads its disc from games\<name>\disc.iso. port.sh puts a hard link to the ISO there, which only works on the same
+# drive: an ISO on another drive (or one a hard link cannot reach) is copied instead.
+$discIso = Join-Path $gameDir 'disc.iso'
+if (-not (Test-Path $discIso)) {
+    try { New-Item -ItemType HardLink -Path $discIso -Target $Iso -ErrorAction Stop | Out-Null }
+    catch { Step 'Copiando la ISO junto al juego (está en otra unidad)'; Copy-Item -LiteralPath $Iso -Destination $discIso -Force }
+}
 
 # ---------------------------------------------------------------- 4. what the launcher needs
 Step 'Preparando las opciones del launcher'

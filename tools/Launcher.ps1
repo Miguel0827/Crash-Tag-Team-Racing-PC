@@ -12,7 +12,7 @@ Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 # The game inherits this: no Windows "has stopped working" box when it crashes; the launcher explains it in its own window.
 Add-Type -Namespace Native -Name Err -MemberDefinition '[DllImport("kernel32.dll")] public static extern uint SetErrorMode(uint mode);'
 [void][Native.Err]::SetErrorMode(0x8003)
-$Version = 'v1.2.0'   # this package's release (in the footer and in error reports)
+$Version = 'v1.3.0'   # this package's release (in the footer and in error reports)
 $IssuesUrl = 'https://github.com/Miguel0827/Crash-Tag-Team-Racing-PC'
 
 $Here    = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -30,7 +30,7 @@ $ShortcutFile = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Crash Tag T
 
 # ---------------------------------------------------------------- texts
 $Texts = @{
- es = @{ title='Crash Tag Team Racing - PC'; ui='Idioma del launcher y del menú F1'; ver='Versión'; game='Idioma del juego'; video='Imagen'; scale='Resolución interna';
+ es = @{ title='Crash Tag Team Racing - PC'; ui='Idioma del launcher y del menú F1'; ver='Versión'; game='Idioma del juego'; video='Imagen'; profile='Perfil gráfico'; scale='Resolución interna';
          look='Estilo de imagen'; vsync='Sincronización vertical'; full='Pantalla completa'; api='API gráfica';
          reshade='Mejora gráfica ReShade'; perf='Corrección de rendimiento de menús'; extras='Extras';
          fps='Doble de FPS (el juego original va a 25-30)'; psp='Desbloquear contenido de PSP (autos, arenas, cooperativo)';
@@ -40,7 +40,7 @@ $Texts = @{
 
 Sí: se borra el juego convertido y se guardan tus partidas (vuelven si la importas de nuevo).
 No: se borra todo, también las partidas.'; err='No se pudo iniciar la instalación:'; invs=@('No','Horizontal','Vertical','Ambos') }
- en = @{ title='Crash Tag Team Racing - PC'; ui='Launcher and F1 menu language'; ver='Version'; game='Game language'; video='Picture'; scale='Internal resolution';
+ en = @{ title='Crash Tag Team Racing - PC'; ui='Launcher and F1 menu language'; ver='Version'; game='Game language'; video='Picture'; profile='Graphics profile'; scale='Internal resolution';
          look='Picture look'; vsync='Vertical sync'; full='Full screen'; api='Graphics API';
          reshade='ReShade graphics enhancement'; perf='Menu performance fix'; extras='Extras';
          fps='Double FPS (the original runs at 25-30)'; psp='Unlock PSP content (cars, arenas, co-op)';
@@ -50,7 +50,7 @@ No: se borra todo, también las partidas.'; err='No se pudo iniciar la instalaci
 
 Yes: the converted game is removed and your saves are kept (they come back if you import it again).
 No: everything is removed, saves too.'; err='The installation could not start:'; invs=@('No','Left-right','Up-down','Both') }
- fr = @{ title='Crash Tag Team Racing - PC'; ui='Langue du lanceur et du menu F1'; ver='Version'; game='Langue du jeu'; video='Image'; scale='Résolution interne';
+ fr = @{ title='Crash Tag Team Racing - PC'; ui='Langue du lanceur et du menu F1'; ver='Version'; game='Langue du jeu'; video='Image'; profile='Profil graphique'; scale='Résolution interne';
          look="Style d'image"; vsync='Synchronisation verticale'; full='Plein écran'; api='API graphique';
          reshade='Amélioration graphique ReShade'; perf='Correctif de performance des menus'; extras='Extras';
          fps="FPS doublés (l'original tourne à 25-30)"; psp='Débloquer le contenu PSP (voitures, arènes, coop)';
@@ -60,7 +60,7 @@ No: everything is removed, saves too.'; err='The installation could not start:';
 
 Oui : le jeu converti est effacé et vos sauvegardes sont gardées.
 Non : tout est effacé, sauvegardes comprises."; err="Impossible de lancer l'installation :"; invs=@('Non','Horizontal','Vertical','Les deux') }
- de = @{ title='Crash Tag Team Racing - PC'; ui='Sprache von Launcher und F1-Menü'; ver='Version'; game='Spielsprache'; video='Bild'; scale='Interne Auflösung';
+ de = @{ title='Crash Tag Team Racing - PC'; ui='Sprache von Launcher und F1-Menü'; ver='Version'; game='Spielsprache'; video='Bild'; profile='Grafikprofil'; scale='Interne Auflösung';
          look='Bildstil'; vsync='Vertikale Synchronisation'; full='Vollbild'; api='Grafik-API';
          reshade='ReShade-Grafikverbesserung'; perf='Leistungskorrektur für Menüs'; extras='Extras';
          fps='Doppelte FPS (das Original läuft mit 25-30)'; psp='PSP-Inhalte freischalten (Autos, Arenen, Koop)';
@@ -70,7 +70,7 @@ Non : tout est effacé, sauvegardes comprises."; err="Impossible de lancer l'ins
 
 Ja: das konvertierte Spiel wird entfernt, deine Spielstände bleiben erhalten.
 Nein: alles wird gelöscht, auch die Spielstände.'; err='Die Installation konnte nicht starten:'; invs=@('Nein','Horizontal','Vertikal','Beide') }
- it = @{ title='Crash Tag Team Racing - PC'; ui='Lingua del launcher e del menu F1'; ver='Versione'; game='Lingua del gioco'; video='Immagine'; scale='Risoluzione interna';
+ it = @{ title='Crash Tag Team Racing - PC'; ui='Lingua del launcher e del menu F1'; ver='Versione'; game='Lingua del gioco'; video='Immagine'; profile='Profilo grafico'; scale='Risoluzione interna';
          look="Stile dell'immagine"; vsync='Sincronizzazione verticale'; full='Schermo intero'; api='API grafica';
          reshade='Miglioramento grafico ReShade'; perf='Correzione prestazioni dei menu'; extras='Extra';
          fps="FPS raddoppiati (l'originale va a 25-30)"; psp='Sblocca contenuti PSP (auto, arene, cooperativa)';
@@ -80,7 +80,7 @@ Nein: alles wird gelöscht, auch die Spielstände.'; err='Die Installation konnt
 
 Sì: il gioco convertito viene rimosso e i salvataggi restano.
 No: viene rimosso tutto, anche i salvataggi."; err="Impossibile avviare l'installazione:"; invs=@('No','Orizzontale','Verticale','Entrambi') }
- pt = @{ title='Crash Tag Team Racing - PC'; ui='Idioma do launcher e do menu F1'; ver='Versão'; game='Idioma do jogo'; video='Imagem'; scale='Resolução interna';
+ pt = @{ title='Crash Tag Team Racing - PC'; ui='Idioma do launcher e do menu F1'; ver='Versão'; game='Idioma do jogo'; video='Imagem'; profile='Perfil gráfico'; scale='Resolução interna';
          look='Estilo de imagem'; vsync='Sincronização vertical'; full='Tela cheia'; api='API gráfica';
          reshade='Melhoria gráfica ReShade'; perf='Correção de desempenho dos menus'; extras='Extras';
          fps='FPS em dobro (o original roda a 25-30)'; psp='Desbloquear conteúdo do PSP (carros, arenas, cooperativo)';
@@ -189,7 +189,8 @@ function Get-PcInfo {
 }
 $PcInfo = Get-PcInfo
 # per kind of PC: the inner resolution, and the plainest picture (no edge smoothing pass) on a modest one
-$DefaultScale = @{ low = 1; mid = 2; high = 4 }[$PcInfo.tier]
+$ProfileScale = @{ low = 1; mid = 2; high = 4 }   # the inner resolution of each graphics profile
+$DefaultScale = $ProfileScale[$PcInfo.tier]
 $DefaultLook = $(if ($PcInfo.tier -eq 'low') { 1 } else { 0 })
 # A first start (no saved settings yet): full screen, the language of Windows for the launcher, the F1 menu and the game, and
 # Direct3D 12 on an Intel graphics chip (their Vulkan drivers are the less reliable ones).
@@ -199,6 +200,7 @@ if ($FirstRun) {
     $cfg.ui = $(if (@($UiLangs | ForEach-Object { $_[0] }) -contains $cul) { $cul } else { 'en' })
     $cfg.game = $(switch ($cul) { 'es' { 3 } 'fr' { 2 } 'de' { 4 } 'it' { 5 } 'nl' { 6 } default { 1 } })
     $cfg.full = $true
+    $cfg.profile = $PcInfo.tier
     if ($PcInfo.intel -and $PcInfo.integrated) { $cfg.api = 'dx12' }
     $cfg.fps = $PcInfo.tier -ne 'low'   # 50/60 FPS on a medium or powerful PC (it doubles the game's work)
 }
@@ -483,11 +485,73 @@ Add-Label 'ver';   $cVer   = Add-Combo @()
 Add-Label 'game';  $cGame  = Add-Combo @()
 $script:y += 4
 Add-Section 'video'
+Add-Label 'profile'; $cProfile = Add-Combo @()
+# Graphics profiles: Low (1x, the plain picture: the most stable), Medium (2x), High (the most this game takes well), Custom (what
+# the player set by hand). The one this PC calls for is marked recommended and chosen on a first start.
+$ProfileKeys = @('low', 'mid', 'high', 'custom')
+function Profile-Text {
+    $k = $UiLangs[[Math]::Max(0, $cUi.SelectedIndex)][0]
+    $all = @{
+        es = @{ names = @('Bajo', 'Medio', 'Alto', 'Personalizado'); rec = '(recomendado)'; left = 'Quedan ~{0} min'; soon = 'Queda menos de 1 min' }
+        en = @{ names = @('Low', 'Medium', 'High', 'Custom'); rec = '(recommended)'; left = 'About {0} min left'; soon = 'Less than 1 min left' }
+        fr = @{ names = @('Bas', 'Moyen', 'Élevé', 'Personnalisé'); rec = '(recommandé)'; left = 'Encore ~{0} min'; soon = 'Moins d''une minute' }
+        de = @{ names = @('Niedrig', 'Mittel', 'Hoch', 'Benutzerdefiniert'); rec = '(empfohlen)'; left = 'Noch ~{0} Min.'; soon = 'Weniger als 1 Min.' }
+        it = @{ names = @('Basso', 'Medio', 'Alto', 'Personalizzato'); rec = '(consigliato)'; left = 'Ancora ~{0} min'; soon = 'Meno di 1 min' }
+        pt = @{ names = @('Baixo', 'Médio', 'Alto', 'Personalizado'); rec = '(recomendado)'; left = 'Faltam ~{0} min'; soon = 'Falta menos de 1 min' }
+    }
+    $all[$(if ($all.ContainsKey($k)) { $k } else { 'en' })]
+}
+$script:syncing = $false
+function Fill-Profiles {
+    $x = Profile-Text; $keep = [Math]::Max(0, $cProfile.SelectedIndex)
+    $script:syncing = $true
+    $cProfile.Items.Clear()
+    for ($i = 0; $i -lt 4; $i++) { $n = $x.names[$i]; if ($ProfileKeys[$i] -eq $PcInfo.tier) { $n += ' ' + $x.rec }; [void]$cProfile.Items.Add($n) }
+    $cProfile.SelectedIndex = $keep
+    $script:syncing = $false
+}
+# a profile's settings into the boxes
+function Apply-Profile([string]$p) {
+    if ($p -eq 'custom') { return }
+    $script:syncing = $true
+    $cScale.SelectedIndex = $ProfileScale[$p] - 1
+    $cLook.SelectedIndex = $(if ($p -eq 'low') { 1 } else { 0 })
+    $kVsync.Checked = $true
+    $kFps.Checked = ($p -ne 'low') -and $kFps.Enabled   # 50/60 FPS doubles the game's work: not on Low
+    $script:syncing = $false
+}
+# which profile the boxes match now (Custom when none)
+function Update-ProfileMatch {
+    if ($script:syncing -or -not $cProfile.Items.Count) { return }
+    $found = 3
+    foreach ($i in 0..2) {
+        $p = $ProfileKeys[$i]
+        $ok = ($cScale.SelectedIndex -eq $ProfileScale[$p] - 1) -and ($cLook.SelectedIndex -eq $(if ($p -eq 'low') { 1 } else { 0 })) -and $kVsync.Checked
+        if ($kFps.Enabled) { $ok = $ok -and ($kFps.Checked -eq ($p -ne 'low')) }
+        if ($ok) { $found = $i; break }
+    }
+    $script:syncing = $true; $cProfile.SelectedIndex = $found; $script:syncing = $false
+}
 Add-Label 'scale'; $cScale = Add-Combo @('1x (PS2)', '2x', '3x', '4x')
 Add-Label 'look';  $cLook  = Add-Combo ($Looks | ForEach-Object { $_[1] })
 Add-Label 'api';   $cApi   = Add-Combo @('Vulkan', 'Direct3D 12')
 $script:y += 2
 $kVsync = Add-Check 'vsync'; $kFull = Add-Check 'full'; $kReshade = Add-Check 'reshade'
+# ReShade itself is not part of the package: this button fetches its official setup and opens it on the game's program
+$kReshade.Width = 480
+$bRs = New-Object Windows.Forms.Button; $bRs.SetBounds(24, $kReshade.Top - 1, 200, 26); $bRs.Font = New-Object Drawing.Font('Segoe UI', 8.5); Style-Button $bRs $false; $form.Controls.Add($bRs)
+function Rs-Text {
+    $k = $UiLangs[[Math]::Max(0, $cUi.SelectedIndex)][0]
+    $all = @{
+        es = @{ button = 'Instalar ReShade...'; ask = "Se descargará el instalador oficial de ReShade (reshade.me) y se abrirá ya apuntando a este juego, con Vulkan. Ahí eliges los efectos y confirmas.`n`nReShade no es parte de este proyecto. ¿Continuar?"; fail = 'No se pudo descargar ReShade. Se abrirá su página para que lo descargues tú.'; none = 'Primero importa el juego.' }
+        en = @{ button = 'Install ReShade...'; ask = "The official ReShade setup (reshade.me) will be downloaded and opened on this game, with Vulkan. Pick the effects there and confirm.`n`nReShade is not part of this project. Continue?"; fail = 'ReShade could not be downloaded. Its page will open so you can get it yourself.'; none = 'Import the game first.' }
+        fr = @{ button = 'Installer ReShade...'; ask = "Le programme d'installation officiel de ReShade (reshade.me) sera téléchargé et ouvert sur ce jeu, avec Vulkan. Choisissez-y les effets et confirmez.`n`nReShade ne fait pas partie de ce projet. Continuer ?"; fail = "ReShade n'a pas pu être téléchargé. Sa page va s'ouvrir pour que vous le téléchargiez."; none = "Importez d'abord le jeu." }
+        de = @{ button = 'ReShade installieren...'; ask = "Das offizielle ReShade-Setup (reshade.me) wird heruntergeladen und für dieses Spiel mit Vulkan geöffnet. Dort Effekte wählen und bestätigen.`n`nReShade gehört nicht zu diesem Projekt. Fortfahren?"; fail = 'ReShade konnte nicht heruntergeladen werden. Die Seite wird geöffnet, damit du es selbst lädst.'; none = 'Importiere zuerst das Spiel.' }
+        it = @{ button = 'Installa ReShade...'; ask = "Verrà scaricato il programma di installazione ufficiale di ReShade (reshade.me) e aperto su questo gioco, con Vulkan. Scegli lì gli effetti e conferma.`n`nReShade non fa parte di questo progetto. Continuare?"; fail = 'Impossibile scaricare ReShade. Si aprirà la sua pagina per scaricarlo tu.'; none = 'Prima importa il gioco.' }
+        pt = @{ button = 'Instalar ReShade...'; ask = "O instalador oficial do ReShade (reshade.me) será baixado e aberto já neste jogo, com Vulkan. Escolha os efeitos lá e confirme.`n`nO ReShade não faz parte deste projeto. Continuar?"; fail = 'Não foi possível baixar o ReShade. A página dele será aberta para você baixar.'; none = 'Importe o jogo primeiro.' }
+    }
+    $all[$(if ($all.ContainsKey($k)) { $k } else { 'en' })]
+}
 Add-Section 'extras'
 $kFps = Add-Check 'fps'; $kPsp = Add-Check 'psp'
 $script:y += 12
@@ -522,7 +586,30 @@ function Relayout([bool]$showVer = $script:showVer, [bool]$showGame = $script:sh
     $showReshade = $cApi.SelectedIndex -eq 0
     foreach ($c in @($cVer, $labels['ver'])) { $c.Visible = $showVer }
     foreach ($c in @($cGame, $labels['game'])) { $c.Visible = $showGame }
-    $kReshade.Visible = $showReshade
+    # ReShade installed for this game (its setup leaves ReShade.ini, or its DLL, next to the game's program): the on/off box; else
+# the Install button
+    $hasRs = $false; $cg = Current-Game
+    if ($cg) {
+        $bin = Join-Path $Root "build\native-$($cg.name)"
+        $hasRs = (Test-Path (Join-Path $bin 'ReShade.ini')) -or (Test-Path (Join-Path $bin 'ReShade64.dll')) -or (Test-Path (Join-Path $bin 'dxgi.dll'))
+        # or ReShade's Vulkan layer, installed for the whole PC, with this game's program in its list of programs
+        if (-not $hasRs) {
+            try {
+                $exeFull = (Get-Item (Join-Path $bin 'ps2run.exe') -ErrorAction Stop).FullName
+                foreach ($k in 'HKLM:\SOFTWARE\Khronos\Vulkan\ImplicitLayers', 'HKCU:\SOFTWARE\Khronos\Vulkan\ImplicitLayers') {
+                    if (-not (Test-Path $k)) { continue }
+                    foreach ($json in @((Get-Item $k).Property | Where-Object { $_ -match 'ReShade' })) {
+                        $apps = Join-Path (Split-Path -Parent $json) 'ReShadeApps.ini'
+                        if (Test-Path $apps) {
+                            $list = ((Get-Content $apps -Raw) -replace '(?m)^Apps=', '') -split '[,\r\n]+' | Where-Object { $_ }
+                            if ($list | Where-Object { $_.Trim() -ieq $exeFull }) { $hasRs = $true }
+                        }
+                    }
+                }
+            } catch {}
+        }
+    }
+    $kReshade.Visible = $showReshade -and $hasRs; $bRs.Visible = $showReshade -and -not $hasRs
     $gone = @(); if (-not $showVer) { $gone += , @($verTop, 32) }; if (-not $showGame) { $gone += , @($gameTop, 32) }; if (-not $showReshade) { $gone += , @($reshadeTop, 30) }
     $total = 0; foreach ($g in $gone) { $total += $g[1] }
     foreach ($c in $form.Controls) { $shift = 0; foreach ($g in $gone) { if ($baseTop[$c] -gt $g[0] + 4) { $shift += $g[1] } }; $c.Top = $baseTop[$c] - $shift }
@@ -544,7 +631,7 @@ function Fill-Versions {
 function Load-Game {
     $g = Current-Game
     $has = $null -ne $g
-    foreach ($c in @($cVer, $cGame, $cScale, $cLook, $cApi, $kVsync, $kFull, $kReshade, $kFps, $kPsp, $bPlay)) { $c.Enabled = $has }
+    foreach ($c in @($cVer, $cGame, $cProfile, $cScale, $cLook, $cApi, $kVsync, $kFull, $kReshade, $kFps, $kPsp, $bPlay)) { $c.Enabled = $has }
     $bDel.Visible = $has
     # the button to press stands out: Import while nothing is installed, PLAY once something is
     Style-Button $bPlay $has; Style-Button $bImport (-not $has)
@@ -562,13 +649,14 @@ function Load-Game {
     $kVsync.Checked = $(if ($ini.vsync) { $ini.vsync -match '^(on|1|yes)$' } else { $true })
     $kFps.Enabled = (Get-Item (Join-Path $Root "games\$($g.name)\patchsets\fps.txt") -ErrorAction SilentlyContinue).Length -gt 0
     $kPsp.Enabled = (Get-Item (Join-Path $Root "games\$($g.name)\patchsets\psp.txt") -ErrorAction SilentlyContinue).Length -gt 0
-    $kReshade.Enabled = $cApi.SelectedIndex -eq 0
+    $kReshade.Enabled = $cApi.SelectedIndex -eq 0; $bRs.Enabled = $kReshade.Enabled
+    Update-ProfileMatch
 }
 function Apply-Texts {
     $t = Lang
     $form.Text = $t.title
     foreach ($k in $labels.Keys) { if ($t.ContainsKey($k)) { $labels[$k].Text = $t[$k] } }
-    $bPlay.Text = $t.play; $bImport.Text = $t.import; $bDel.Text = $t.del; $bQuit.Text = $t.quit
+    $bPlay.Text = $t.play; $bRs.Text = (Rs-Text).button; Fill-Profiles; Update-ProfileMatch; $bImport.Text = $t.import; $bDel.Text = $t.del; $bQuit.Text = $t.quit
     Fill-Versions
     if (-not (Current-Game)) { $note.Text = $t.none }
 }
@@ -630,6 +718,11 @@ function Import-Iso {
     $w.BackColor = $Theme.bg; $w.ForeColor = [Drawing.Color]::White; $w.ControlBox = $false; $w.Font = New-Object Drawing.Font('Segoe UI', 10)
     $stage = New-Object Windows.Forms.Label; $stage.SetBounds(12, 12, 560, 26); $stage.Font = New-Object Drawing.Font('Segoe UI Semibold', 12); $stage.ForeColor = $Theme.lilac; $w.Controls.Add($stage)
     $clock = New-Object Windows.Forms.Label; $clock.SetBounds(580, 14, 128, 24); $clock.TextAlign = 'MiddleRight'; $clock.ForeColor = $Theme.muted; $w.Controls.Add($clock)
+$est = New-Object Windows.Forms.Label; $est.SetBounds(250, 14, 330, 24); $est.TextAlign = 'MiddleRight'; $est.ForeColor = $Theme.lilac; $w.Controls.Add($est)
+# seconds from each mark (below) to the next on a fast PC; marks 0 and 1 are downloads
+$refSec = @(4, 45, 2, 20, 3, 2, 3, 10, 80, 10, 90, 4, 0)
+$prior = @{ low = 4.0; mid = 2.0; high = 1.0 }[$PcInfo.tier]
+$script:seen = @{}
     # the progress bar as a row of pixel blocks in the purple gradient (Windows' own bar is green and cannot be recoloured)
     $bar = New-Object Windows.Forms.PictureBox; $bar.SetBounds(12, 44, 696, 26); $bar.BackColor = $Theme.panel; $w.Controls.Add($bar)
     $script:barVal = 0
@@ -674,6 +767,24 @@ function Import-Iso {
                 if ($script:creep -lt $next - 1 -and $script:creep -ge $pct) { $script:creep += 0.15 } else { $script:creep = $pct }
                 $script:barVal = [Math]::Min(100, [int][Math]::Max($pct, [Math]::Min($next - 1, $script:creep))); $bar.Invalidate()
                 $stage.Text = $t.steps[$step]
+                # when each mark first showed up (an installation found running: from now on)
+                for ($k = 0; $k -lt $marks.Count; $k++) { if (-not $script:seen.ContainsKey($k) -and ($all -match $marks[$k][0])) { $script:seen[$k] = [DateTime]::Now } }
+                $done = @($script:seen.Keys | Sort-Object)
+                if ($done.Count -and -not $script:seen.ContainsKey($marks.Count - 1)) {
+                    $act = @{ net = 0.0; cpu = 0.0 }; $ref = @{ net = 0.0; cpu = 0.0 }
+                    for ($j = 0; $j -lt $done.Count - 1; $j++) {
+                        $a = $done[$j]; $b = $done[$j + 1]; $kind = $(if ($a -le 1) { 'net' } else { 'cpu' })
+                        $act[$kind] += ($script:seen[$b] - $script:seen[$a]).TotalSeconds
+                        for ($q = $a; $q -lt $b; $q++) { $ref[$kind] += $refSec[$q] }
+                    }
+                    $rCpu = $(if ($ref.cpu -ge 20) { [Math]::Max(0.3, $act.cpu / $ref.cpu) } else { $prior })
+                    $rNet = $(if ($ref.net -ge 20) { [Math]::Max(0.3, $act.net / $ref.net) } else { 1.0 })
+                    $cur = $done[-1]
+                    $left = [Math]::Max(5, $refSec[$cur] * $(if ($cur -le 1) { $rNet } else { $rCpu }) - ([DateTime]::Now - $script:seen[$cur]).TotalSeconds)
+                    for ($q = $cur + 1; $q -lt $refSec.Count; $q++) { if ($q -eq 1 -and $cur -ge 1) { continue }; $left += $refSec[$q] * $(if ($q -le 1) { $rNet } else { $rCpu }) }
+                    $x = Profile-Text
+                    $est.Text = $(if ($left -lt 60) { $x.soon } else { $x.left -f [Math]::Ceiling($left / 60) })
+                } else { $est.Text = '' }
             } catch {}
         }
         if ($p.HasExited) {
@@ -699,6 +810,7 @@ $cUi.SelectedIndex = [Math]::Max(0, [Array]::IndexOf(@($UiLangs | ForEach-Object
 $cApi.SelectedIndex = $(if ($cfg.api -eq 'dx12') { 1 } else { 0 })
 $kFull.Checked = [bool]$cfg.full; $kReshade.Checked = [bool]$cfg.reshade; $kFps.Checked = [bool]$cfg.fps; $kPsp.Checked = [bool]$cfg.psp
 Apply-Texts; Load-Game
+Update-ProfileMatch
 $cUi.Add_SelectedIndexChanged({ Apply-Texts })
 $cVer.Add_SelectedIndexChanged({ Load-Game })
 $cApi.Add_SelectedIndexChanged({ Relayout })
@@ -726,7 +838,7 @@ $bPlay.Add_Click({
     $g = Current-Game; if (-not $g) { return }
     $gameDir = Join-Path $Root "games\$($g.name)"
     Set-IniLines (Join-Path $gameDir 'keys.ini') @{ scale = ($cScale.SelectedIndex + 1); look = $Looks[$cLook.SelectedIndex][0]; vsync = $(if ($kVsync.Checked) { 'on' } else { 'off' }) }
-    $cfg.ui = $UiLangs[$cUi.SelectedIndex][0]; $cfg.version = $g.name
+    $cfg.ui = $UiLangs[$cUi.SelectedIndex][0]; $cfg.version = $g.name; $cfg.profile = $ProfileKeys[[Math]::Max(0, $cProfile.SelectedIndex)]
     if ($cGame.SelectedIndex -ge 0) { $cfg.game = [int]@($g.languages)[$cGame.SelectedIndex] }
     $cfg.api = $(if ($cApi.SelectedIndex -eq 1) { 'dx12' } else { 'vulkan' })
     $cfg.reshade = $kReshade.Checked; $cfg.fps = $kFps.Checked; $cfg.psp = $kPsp.Checked; $cfg.full = $kFull.Checked
@@ -741,4 +853,31 @@ if ($FirstRun -and (Current-Game)) {
     $kind = @{ low = @('PC modesto', 'modest PC'); mid = @('PC medio', 'medium PC'); high = @('PC potente', 'powerful PC') }[$PcInfo.tier]
     $note.Text = $(if ($cfg.ui -eq 'es') { "Ajustes elegidos para tu PC: $($kind[0]) ($($DefaultScale)x)" } else { "Settings chosen for your PC: $($kind[1]) ($($DefaultScale)x)" })
 }
+$cProfile.Add_SelectedIndexChanged({ if (-not $script:syncing -and $cProfile.SelectedIndex -ge 0) { Apply-Profile $ProfileKeys[$cProfile.SelectedIndex] } })
+foreach ($c in @($cScale, $cLook)) { $c.Add_SelectedIndexChanged({ Update-ProfileMatch }) }
+$kVsync.Add_CheckedChanged({ Update-ProfileMatch })
+$kFps.Add_CheckedChanged({ Update-ProfileMatch })
+$form.Add_Activated({ if ($form.Visible) { Relayout } })
+$bRs.Add_Click({
+    $x = Rs-Text; $g = Current-Game
+    if (-not $g) { [void][Windows.Forms.MessageBox]::Show($x.none, 'ReShade', 'OK', 'Information'); return }
+    if ([Windows.Forms.MessageBox]::Show($x.ask, 'ReShade', 'YesNo', 'Question') -ne 'Yes') { return }
+    $exe = (Get-Item (Join-Path $Root "build\native-$($g.name)\ps2run.exe")).FullName
+    $form.Cursor = [Windows.Forms.Cursors]::WaitCursor
+    try {
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        # the newest setup named on the official page (not the add-on one)
+        $page = (Invoke-WebRequest -UseBasicParsing 'https://reshade.me/' -TimeoutSec 20).Content
+        $m = [regex]::Match($page, 'downloads/(ReShade_Setup_[0-9.]+\.exe)')
+        if (-not $m.Success) { throw 'no setup link on reshade.me' }
+        $setup = Join-Path $env:TEMP $m.Groups[1].Value
+        if (-not (Test-Path $setup) -or (Get-Item $setup).Length -lt 1MB) { Invoke-WebRequest -UseBasicParsing ("https://reshade.me/downloads/" + $m.Groups[1].Value) -OutFile $setup -TimeoutSec 120 }
+        if ((Get-Item $setup).Length -lt 1MB) { throw 'the download is too small' }
+        Start-Process -FilePath $setup -ArgumentList @("`"$exe`"", '--api', 'vulkan')
+        $kReshade.Checked = $true
+    } catch {
+        [void][Windows.Forms.MessageBox]::Show($x.fail, 'ReShade', 'OK', 'Warning')
+        Start-Process 'https://reshade.me/'
+    } finally { $form.Cursor = [Windows.Forms.Cursors]::Default }
+})
 [void]$form.ShowDialog()

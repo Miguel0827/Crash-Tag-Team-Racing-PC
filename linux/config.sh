@@ -56,7 +56,7 @@ while true; do
   fields+=(--add-combo="$(t 'Double FPS (the original runs at 25-30)' 'Doble de FPS (el original va a 25-30)')" --combo-values="$(first_then "$(yes_no "$fps")" "$(t Yes Sí)" No)")
   fields+=(--add-combo="$(t 'Unlock PSP content (cars, arenas, co-op)' 'Contenido de PSP (autos, arenas, cooperativo)')" --combo-values="$(first_then "$(yes_no "$psp")" "$(t Yes Sí)" No)")
 
-  out="$(z --forms --width=520 --separator='|' --text="CRASH TAG TEAM RACING  ·  PC  ·  By NyxBorn  ·  v1.2.0" \
+  out="$(z --forms --width=520 --separator='|' --text="CRASH TAG TEAM RACING  ·  PC  ·  By NyxBorn  ·  v1.3.0" \
          --ok-label="$(t 'PLAY' 'JUGAR')" --cancel-label="$(t 'Quit' 'Salir')" --extra-button="$import_label" "${fields[@]}")"
   rc=$?
   if [ "$out" = "$import_label" ]; then bash "$here/install.sh"; continue; fi

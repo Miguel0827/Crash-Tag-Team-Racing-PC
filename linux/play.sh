@@ -88,6 +88,15 @@ if [ "$code" != 0 ] || { [ -n "$log" ] && ! printf '%s' "$reason" | grep -qE 'wi
     echo "Log: ${log:-none}"; echo; echo '--- last lines of the log ---'
     [ -z "$log" ] || grep -vE '^\[(fileio|cdvdfsv|iop-io)\]' "$log" | tail -n 40
   } > "$report" 2> /dev/null
+  # one step lower for the next start (4x/3x -> 2x -> 1x with the plain picture), in case the graphics card could not take it
+  was="$(sed -nE 's/^[[:space:]]*scale[[:space:]]*=[[:space:]]*([0-9]+).*/\1/p' "$ini" | tail -n1)"; : "${was:=1}"
+  lowered=""
+  if [ "$was" -gt 1 ]; then
+    to=1; [ "$was" -ge 3 ] && to=2
+    set_ini scale "$to"; conf_set scale "$to"
+    if [ "$to" = 1 ]; then set_ini look sharp; conf_set look sharp; fi
+    lowered="$(t "Your graphics card may not support these settings, so they were lowered by themselves: resolution ${was}x -> ${to}x." "Puede que tu tarjeta gráfica no soporte esta configuración, así que la cambié sola a una más baja: resolución ${was}x -> ${to}x.")"
+  fi
   msg="$(t "Sorry: the game closed because of an error. It is not your fault.
 A report of what happened was saved to:
 $report
@@ -97,6 +106,9 @@ Se guardó un informe de lo que pasó en:
 $report
 Envíalo (adjunta el archivo) para poder arreglarlo:
 https://github.com/Miguel0827/Crash-Tag-Team-Racing-PC/issues")"
+  [ -z "$lowered" ] || msg="$lowered
+
+$msg"
   printf '\n%s\n' "$msg" >&2
   if [ "$gui" = 1 ]; then z --error --width=620 --no-markup --text="$msg"; fi
 fi

@@ -12,7 +12,7 @@ Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 # The game inherits this: no Windows "has stopped working" box when it crashes; the launcher explains it in its own window.
 Add-Type -Namespace Native -Name Err -MemberDefinition '[DllImport("kernel32.dll")] public static extern uint SetErrorMode(uint mode);'
 [void][Native.Err]::SetErrorMode(0x8003)
-$Version = 'v1.3.1'   # this package's release (in the footer and in error reports)
+$Version = 'v1.3.2'   # this package's release (in the footer and in error reports)
 $IssuesUrl = 'https://github.com/Miguel0827/Crash-Tag-Team-Racing-PC'
 
 $Here    = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -286,10 +286,16 @@ function Update-GameExe {
 $CrashTexts = @{
  es = @{ title = 'Lo sentimos'; head = 'El juego se cerró por un error'; body = "No es culpa tuya. Este informe dice qué pasó y en qué PC: envíalo y lo arreglo en la próxima versión."
          copy = 'Copiar informe'; send = 'Reportar en GitHub'; safe = 'Probar ajustes seguros'; close = 'Cerrar'; copied = 'Copiado'; saved = 'Informe guardado en:'
-         safedone = 'Resolución 1x, imagen simple y la otra API gráfica: el juego se abre otra vez con estos ajustes.' }
+         safedone = 'Resolución 1x, imagen simple y la otra API gráfica: el juego se abre otra vez con estos ajustes.'
+         gpu = 'Tu tarjeta gráfica no soporta esta configuración, así que la cambié sola a una más baja: {0}.'
+         maybe = 'Puede que tu tarjeta gráfica no soporte esta configuración, así que la cambié sola a una más baja: {0}.'
+         scaleTo = 'resolución {0}x → {1}x'; apiTo = 'API gráfica {0} → {1}'; again = 'Jugar de nuevo' }
  en = @{ title = 'Sorry'; head = 'The game closed because of an error'; body = "It is not your fault. This report says what happened and on what PC: send it and I will fix it in the next version."
          copy = 'Copy report'; send = 'Report on GitHub'; safe = 'Try safe settings'; close = 'Close'; copied = 'Copied'; saved = 'Report saved to:'
-         safedone = 'Resolution 1x, the plain picture and the other graphics API: the game starts again with these settings.' }
+         safedone = 'Resolution 1x, the plain picture and the other graphics API: the game starts again with these settings.'
+         gpu = 'Your graphics card does not support these settings, so they were lowered by themselves: {0}.'
+         maybe = 'Your graphics card may not support these settings, so they were lowered by themselves: {0}.'
+         scaleTo = 'resolution {0}x → {1}x'; apiTo = 'graphics API {0} → {1}'; again = 'Play again' }
 }
 # (its own button style: the window can open before the settings window's functions are defined, from the game .exe)
 function Crash-Button($b, [bool]$main) {
@@ -342,6 +348,25 @@ function Show-CrashReport($g, [int]$code, [string]$reason, $lines, $log) {
         "Log: $(if ($log) { $log.FullName } else { 'none' })", '',
         '--- last lines of the log ---') + $tail
     $text = $report -join "`r`n"
+    # One step lower for the next start, in case the graphics card could not take the settings: 4x/3x -> 2x -> 1x (with the plain
+    # picture), and at 1x the other graphics API. The window says what changed.
+    $gpuFault = (($errs -join ' ') -match 'wgpu|[Dd]evice|DXGI|VK_ERROR') -or (($tail -join ' ') -match 'wgpuSurface|gs3gpu|DEVICE_REMOVED|DEVICE_HUNG')
+    $keysFile = Join-Path $Root "games\$($g.name)\keys.ini"
+    $was = 1; if ([string]$ini.scale -match '^\d+$') { $was = [int]$ini.scale }
+    if ($was -gt 1) {
+        $to = $(if ($was -ge 3) { 2 } else { 1 })
+        $vals = @{ scale = $to }; if ($to -eq 1) { $vals.look = 'sharp' }
+        Set-IniLines $keysFile $vals
+        $cfg.profile = $(if ($to -eq 2) { 'mid' } else { 'low' })
+        $changed = $x.scaleTo -f $was, $to
+    } else {
+        $apiName = @{ vulkan = 'Vulkan'; dx12 = 'DirectX 12' }
+        $from = $apiName[[string]$cfg.api]; if (-not $from) { $from = 'Vulkan' }
+        $cfg.api = $(if ($cfg.api -eq 'dx12') { 'vulkan' } else { 'dx12' })
+        Set-IniLines $keysFile @{ look = 'sharp' }
+        $changed = $x.apiTo -f $from, $apiName[$cfg.api]
+    }
+    try { Save-Cfg } catch {}
     # a copy next to the programs, to attach to a report
     $saved = ''
     try {
@@ -361,12 +386,14 @@ function Show-CrashReport($g, [int]$code, [string]$reason, $lines, $log) {
     $h = New-Object Windows.Forms.Label; $h.Text = $x.head; $h.SetBounds(20, 20, 580, 28); $h.Font = New-Object Drawing.Font('Segoe UI Semibold', 13); $h.ForeColor = $Theme.lilac; $d.Controls.Add($h)
     $b = New-Object Windows.Forms.Label; $b.Text = $x.body; $b.SetBounds(20, 52, 580, 44); $b.ForeColor = $Theme.pale; $d.Controls.Add($b)
     $box = New-Object Windows.Forms.TextBox; $box.Multiline = $true; $box.ReadOnly = $true; $box.ScrollBars = 'Both'; $box.WordWrap = $false
-    $box.SetBounds(20, 100, 580, 270); $box.BackColor = $Theme.panel; $box.ForeColor = $Theme.pale; $box.BorderStyle = 'FixedSingle'; $box.Font = New-Object Drawing.Font('Consolas', 8.5); $box.Text = $text; $d.Controls.Add($box)
+    $al = New-Object Windows.Forms.Label; $al.SetBounds(20, 98, 580, 46); $al.Padding = New-Object Windows.Forms.Padding(8, 4, 8, 4); $al.BackColor = $Theme.deep; $al.ForeColor = [Drawing.Color]::White
+    $al.Font = New-Object Drawing.Font('Segoe UI Semibold', 9.5); $al.Text = $(if ($gpuFault) { $x.gpu } else { $x.maybe }) -f $changed; $d.Controls.Add($al)
+    $box.SetBounds(20, 150, 580, 222); $box.BackColor = $Theme.panel; $box.ForeColor = $Theme.pale; $box.BorderStyle = 'FixedSingle'; $box.Font = New-Object Drawing.Font('Consolas', 8.5); $box.Text = $text; $d.Controls.Add($box)
     $sv = New-Object Windows.Forms.Label; $sv.SetBounds(20, 372, 580, 34); $sv.ForeColor = $Theme.muted; $sv.Font = New-Object Drawing.Font('Segoe UI', 8.5)
     if ($saved) { $sv.Text = "$($x.saved) $saved" }; $d.Controls.Add($sv)
     $bCopy = New-Object Windows.Forms.Button; $bCopy.Text = $x.copy; $bCopy.SetBounds(20, 410, 130, 36); Crash-Button $bCopy $false; $d.Controls.Add($bCopy)
     $bSend = New-Object Windows.Forms.Button; $bSend.Text = $x.send; $bSend.SetBounds(158, 410, 160, 36); Crash-Button $bSend $true; $d.Controls.Add($bSend)
-    $bSafe = New-Object Windows.Forms.Button; $bSafe.Text = $x.safe; $bSafe.SetBounds(326, 410, 170, 36); Crash-Button $bSafe $false; $d.Controls.Add($bSafe)
+    $bSafe = New-Object Windows.Forms.Button; $bSafe.Text = $x.again; $bSafe.SetBounds(326, 410, 170, 36); Crash-Button $bSafe $false; $d.Controls.Add($bSafe)
     $bClose = New-Object Windows.Forms.Button; $bClose.Text = $x.close; $bClose.SetBounds(504, 410, 96, 36); Crash-Button $bClose $false; $bClose.ForeColor = $Theme.muted; $d.Controls.Add($bClose)
     $bCopy.Add_Click({ [Windows.Forms.Clipboard]::SetText($text); $bCopy.Text = (Crash-Text).copied })
     $bSend.Add_Click({
@@ -380,10 +407,7 @@ function Show-CrashReport($g, [int]$code, [string]$reason, $lines, $log) {
     })
     $script:retrySafe = $false
     $bSafe.Add_Click({
-        $keysFile = Join-Path $Root "games\$($g.name)\keys.ini"
-        Set-IniLines $keysFile @{ scale = 1; look = 'sharp' }
-        $cfg.api = $(if ($cfg.api -eq 'vulkan') { 'dx12' } else { 'vulkan' }); Save-Cfg
-        [void][Windows.Forms.MessageBox]::Show((Crash-Text).safedone, (Crash-Text).title, 'OK', 'Information')
+        # (the lower settings are already saved)
         $script:retrySafe = $true; $d.Close()
     })
     $bClose.Add_Click({ $d.Close() })

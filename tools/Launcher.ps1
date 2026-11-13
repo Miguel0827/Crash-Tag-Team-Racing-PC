@@ -12,7 +12,7 @@ Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 # The game inherits this: no Windows "has stopped working" box when it crashes; the launcher explains it in its own window.
 Add-Type -Namespace Native -Name Err -MemberDefinition '[DllImport("kernel32.dll")] public static extern uint SetErrorMode(uint mode);'
 [void][Native.Err]::SetErrorMode(0x8003)
-$Version = 'v1.3.0'   # this package's release (in the footer and in error reports)
+$Version = 'v1.3.1'   # this package's release (in the footer and in error reports)
 $IssuesUrl = 'https://github.com/Miguel0827/Crash-Tag-Team-Racing-PC'
 
 $Here    = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -320,6 +320,15 @@ function Show-CrashReport($g, [int]$code, [string]$reason, $lines, $log) {
     $meaning = if ($ExitMeaning.ContainsKey($code)) { $ExitMeaning[$code] } elseif ($code -eq 0) { 'the game stopped itself' } else { 'unknown' }
     $ini = Read-Ini (Join-Path $Root "games\$($g.name)\keys.ini")
     $tail = @($lines | Where-Object { $_ -notmatch '^\[(fileio|cdvdfsv|iop-io)\]|^\[iop\] (thread|module)' } | Select-Object -Last 40)
+    # the graphics card the game ran on, and the error message itself (above the part the last lines show)
+    $gpuUsed = @($lines | Where-Object { $_ -match '^\[gpu\] .+ on (Vulkan|Direct3D)' } | Select-Object -First 1 | ForEach-Object { $_ -replace '^\[gpu\]\s*', '' })
+    $errs = @(); for ($i = 0; $i -lt $lines.Count; $i++) {
+        if ($lines[$i] -match 'panicked at|^Error in wgpu|[Dd]evice (is )?lost|DXGI_ERROR|VK_ERROR_') {
+            $errs += $lines[$i].Trim()
+            if ($lines[$i] -match 'panicked at' -and $i + 1 -lt $lines.Count) { $errs += $lines[$i + 1].Trim() }
+        }
+    }
+    $errs = @($errs | Where-Object { $_ } | Select-Object -Unique | Select-Object -First 6)
     $report = @(
         "$($x.head) - $(($Texts['en']).title) $Version", '',
         "Game: $($g.name) ($($g.elf), $($g.region))",
@@ -328,6 +337,8 @@ function Show-CrashReport($g, [int]$code, [string]$reason, $lines, $log) {
         "Settings: scale $($ini.scale), look $($ini.look), vsync $($ini.vsync), API $($cfg.api), full screen $($cfg.full)",
         "PC: $($PcInfo.os); $($PcInfo.cpu) ($($PcInfo.cores) threads); $($PcInfo.ram) GB RAM; kind $($PcInfo.tier)",
         "Graphics: $($PcInfo.gpus -join '; ')",
+        "GPU used: $(if ($gpuUsed) { $gpuUsed[0] } else { 'not in the log' })",
+        "Error: $(if ($errs) { $errs -join ' / ' } else { 'no error message in the log' })",
         "Log: $(if ($log) { $log.FullName } else { 'none' })", '',
         '--- last lines of the log ---') + $tail
     $text = $report -join "`r`n"
@@ -360,7 +371,7 @@ function Show-CrashReport($g, [int]$code, [string]$reason, $lines, $log) {
     $bCopy.Add_Click({ [Windows.Forms.Clipboard]::SetText($text); $bCopy.Text = (Crash-Text).copied })
     $bSend.Add_Click({
         # GitHub's new issue page with the report filled in (the log's last lines cut to keep the address short; the saved file has them all)
-        $body = ($report | Select-Object -First 12) -join "`n"
+        $body = ($report | Select-Object -First 14) -join "`n"
         $fence = ([string][char]96) * 3
         $body += "`n`n" + $fence + "`n" + (($tail | Select-Object -Last 25) -join "`n") + "`n" + $fence + "`n"
         $url = "$IssuesUrl/issues/new?title=" + [Uri]::EscapeDataString("Game closed with an error ($hex)") + '&body=' + [Uri]::EscapeDataString($body)

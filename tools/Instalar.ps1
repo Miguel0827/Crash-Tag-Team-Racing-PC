@@ -79,6 +79,20 @@ if ($stale -or -not (Test-Path $Marker)) {
     Set-Content -Path $Marker -Value $PatchId -Encoding ascii
 }
 
+# The folder moved (from the desktop to another drive...): a build set-up made for the old place is made again here
+# (CMake will not reuse it; the program already built in it stays)
+$here = $Root.Replace('\', '/').TrimEnd('/')
+Get-ChildItem (Join-Path $Root 'build') -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+    $cache = Join-Path $_.FullName 'CMakeCache.txt'
+    if (Test-Path $cache) {
+        $madeIn = (Select-String -Path $cache -Pattern '^CMAKE_HOME_DIRECTORY:INTERNAL=(.*)$' | Select-Object -First 1).Matches.Groups[1].Value
+        if ($madeIn -and $madeIn.TrimEnd('/') -ne $here) {
+            Write-Host "build\$($_.Name): preparado en otra carpeta ($madeIn), se prepara de nuevo"
+            Get-ChildItem $_.FullName -Force | Where-Object { $_.Name -in 'CMakeCache.txt', 'CMakeFiles', 'build.ninja', '.ninja_deps', '.ninja_log', 'cmake_install.cmake' } | Remove-Item -Recurse -Force
+        }
+    }
+}
+
 Step 'Compilando el convertidor (setup.sh)'
 Run $bash (PosixPath (Join-Path $Root 'scripts\setup.sh')) --native-only
 if ($LASTEXITCODE -ne 0) { throw "setup.sh falló ($LASTEXITCODE)" }

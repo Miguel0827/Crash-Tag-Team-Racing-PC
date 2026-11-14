@@ -92,6 +92,16 @@ do_install() (
   chmod +x scripts/*.sh 2> /dev/null || true
 
   step "Building the converter (setup.sh)"
+  # the folder moved: a build set-up made for another place is made again here (CMake will not reuse it; the program built stays)
+  for c in build/*/CMakeCache.txt; do
+    [ -f "$c" ] || continue
+    made="$(sed -n 's/^CMAKE_HOME_DIRECTORY:INTERNAL=//p' "$c" | head -n1)"
+    if [ -n "$made" ] && [ "${made%/}" != "$(pwd)" ] && [ "${made%/}" != "$(pwd -P)" ]; then
+      d="$(dirname "$c")"
+      echo "$d: set up in another folder ($made), set up again"
+      rm -rf "$d/CMakeCache.txt" "$d/CMakeFiles" "$d/build.ninja" "$d/.ninja_deps" "$d/.ninja_log" "$d/cmake_install.cmake"
+    fi
+  done
   bash scripts/setup.sh --native-only
 
   # 2. which version is the disc

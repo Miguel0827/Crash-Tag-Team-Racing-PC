@@ -12,7 +12,7 @@ Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 # The game inherits this: no Windows "has stopped working" box when it crashes; the launcher explains it in its own window.
 Add-Type -Namespace Native -Name Err -MemberDefinition '[DllImport("kernel32.dll")] public static extern uint SetErrorMode(uint mode);'
 [void][Native.Err]::SetErrorMode(0x8003)
-$Version = 'v1.3.3'   # this package's release (in the footer and in error reports)
+$Version = 'v1.3.4'   # this package's release (in the footer and in error reports)
 $IssuesUrl = 'https://github.com/Miguel0827/Crash-Tag-Team-Racing-PC'
 
 $Here    = Split-Path -Parent $MyInvocation.MyCommand.Path

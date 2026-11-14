@@ -3,6 +3,6 @@
   "format": 1,
   "repo": "Miguel0827/Crash-Tag-Team-Racing-PC",
   "start": {
-    "program": ["Crash Tag Team Racing PC - Config.exe"]
+    "program": ["Crash Tag Team Racing PC - Config.exe", "linux/config.sh"]
   }
 }

@@ -15,6 +15,12 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int show) {
 
     wchar_t script[MAX_PATH + 32];
     swprintf(script, MAX_PATH + 32, L"%ls\\tools\\Launcher.ps1", dir);
+    // run from tools\starter (where the game .exe waits until a game is installed): the package folder is two levels up
+    size_t len = wcslen(dir);
+    if (GetFileAttributesW(script) == INVALID_FILE_ATTRIBUTES && len > 14 && _wcsicmp(dir + len - 14, L"\\tools\\starter") == 0) {
+        dir[len - 14] = 0;
+        swprintf(script, MAX_PATH + 32, L"%ls\\tools\\Launcher.ps1", dir);
+    }
     if (GetFileAttributesW(script) == INVALID_FILE_ATTRIBUTES) {
         MessageBoxW(NULL, L"tools\\Launcher.ps1 is missing. Extract the whole download (all folders) and run this program from there.\n\n"
                           L"Falta tools\\Launcher.ps1. Descomprime toda la descarga (con sus carpetas) y abre este programa desde ahí.",

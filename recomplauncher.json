@@ -1,0 +1,8 @@
+{
+  "$schema": "https://recomplauncher.com/schema/recomplauncher.json",
+  "format": 1,
+  "repo": "Miguel0827/Crash-Tag-Team-Racing-PC",
+  "start": {
+    "program": ["Crash Tag Team Racing PC - Config.exe"]
+  }
+}

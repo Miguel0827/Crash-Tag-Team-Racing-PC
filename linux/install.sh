@@ -7,7 +7,7 @@
 set -uo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 . "$here/ui.sh"
-commit=b1af7232b3200b12fbb8135ba583364c992f0aa5   # the ps2-native-recomp version the fixes are made for
+commit=5d1ebbcf133cb3c31df75a294dbe38e30734c1ce   # the ps2-native-recomp version the fixes are made for
 patch="$pkg/patches/cttr-fixes.patch"
 
 die() { printf '\nERROR: %s\n' "$1" >&2; exit 1; }
@@ -75,6 +75,12 @@ do_install() (
       || die "ps2-native-recomp could not be downloaded (no internet?)"
     unzip -q "$tmp/src.zip" -d "$tmp/x"
     cp -a "$tmp/x/ps2-native-recomp-$commit/." "$root/"
+  # what the old converter compiled: its runtime again from scratch (a newer one has other source files), each game's build set-up
+  # made again (its program stays, so the game keeps showing until it is imported again)
+  rm -rf "$root"/build/runtime-* 2> /dev/null || true
+  for b in "$root"/build/native-*; do
+    if [ -d "$b" ]; then rm -rf "$b/CMakeCache.txt" "$b/CMakeFiles" "$b/build.ninja" "$b/.ninja_deps" "$b/.ninja_log" "$b/cmake_install.cmake"; fi
+  done
     rm -rf "$tmp"
   fi
   cd "$root"
@@ -167,7 +173,7 @@ log="${TMPDIR:-/tmp}/cttr-pc-install.log"
 if [ "$gui" = 1 ]; then
   do_install 2>&1 | tee "$log" | progress_lines | z --progress --width=560 --percentage=1 \
     --text="$(t 'Starting...' 'Empezando...')" --cancel-label="$(t 'Cancel' 'Cancelar')"
-  rc=${PIPESTATUS[0]}; zrc=${PIPESTATUS[3]}
+  st=("${PIPESTATUS[@]}"); rc=${st[0]}; zrc=${st[3]:-0}   # (both read at once: an assignment resets PIPESTATUS)
   if [ "$zrc" != 0 ] && [ "$rc" != 0 ]; then
     z --info --width=480 --text="$(t 'Installation cancelled. The next import starts from scratch.' 'Instalación cancelada. La próxima importación empieza de cero.')"
     exit 1

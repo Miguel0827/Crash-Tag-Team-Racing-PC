@@ -11,7 +11,7 @@ if (-not $Root) { $Root = Join-Path $Package 'engine' }
 New-Item -ItemType Directory -Force $Root | Out-Null
 $short = (New-Object -ComObject Scripting.FileSystemObject).GetFolder($Root).ShortPath   # no spaces for the build tools
 if ($short -and $short -notmatch ' ') { $Root = $short }
-$Commit  = 'b1af7232b3200b12fbb8135ba583364c992f0aa5'   # the ps2-native-recomp version the fixes are made for
+$Commit  = '5d1ebbcf133cb3c31df75a294dbe38e30734c1ce'   # the ps2-native-recomp version the fixes are made for
 $Patch   = Join-Path $Package 'patches\cttr-fixes.patch'
 $Marker  = Join-Path $Root '.cttr-fixes-applied'
 
@@ -51,6 +51,12 @@ if ($stale -or -not (Test-Path (Join-Path $Root 'scripts\port.sh'))) {   # an em
     New-Item -ItemType Directory -Force $Root | Out-Null
     Copy-Item "$tmp\x\ps2-native-recomp-$Commit\*" $Root -Recurse -Force
     Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
+    # what the old converter compiled: its runtime again from scratch (a newer one has other source files), and each game's build
+    # set-up made again (its program and ReShade's files stay, so the game keeps showing until it is imported again)
+    Get-ChildItem (Join-Path $Root 'build') -Directory -Filter 'runtime-*' -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force
+    Get-ChildItem (Join-Path $Root 'build') -Directory -Filter 'native-*' -ErrorAction SilentlyContinue | ForEach-Object {
+        Get-ChildItem $_.FullName -Force | Where-Object { $_.Name -in 'CMakeCache.txt', 'CMakeFiles', 'build.ninja', '.ninja_deps', '.ninja_log', 'cmake_install.cmake' } | Remove-Item -Recurse -Force
+    }
 }
 Set-Location $Root
 

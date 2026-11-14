@@ -1,8 +1,8 @@
 diff --git a/host/keymap.cpp b/host/keymap.cpp
-index e9fcf9e..acb36d6 100644
+index 2241140..805076b 100644
 --- a/host/keymap.cpp
 +++ b/host/keymap.cpp
-@@ -166,6 +166,21 @@ const char *sharp_2d_word(int sharp) {
+@@ -168,6 +168,21 @@ const char *sharp_2d_word(int sharp) {
  
  std::string with_sharp_2d(const std::string &file_text, int sharp) { return with_line(file_text, "sharp2d", std::string("sharp_2d = ") + sharp_2d_word(sharp)); }
  
@@ -24,7 +24,7 @@ index e9fcf9e..acb36d6 100644
  bool is_reserved(int input) {
      return input == SDL_SCANCODE_F1 || input == SDL_SCANCODE_F2 || input == SDL_SCANCODE_F5 || input == SDL_SCANCODE_F8 || input == SDL_SCANCODE_F9 || input == SDL_SCANCODE_F11;
  }
-@@ -281,6 +296,30 @@ void parse(const std::string &text, Config &config, std::vector<std::string> &pr
+@@ -283,6 +298,30 @@ void parse(const std::string &text, Config &config, std::vector<std::string> &pr
              else bad("scale is 1, 2, 3 or 4, ignored");
              continue;
          }
@@ -56,20 +56,20 @@ index e9fcf9e..acb36d6 100644
              const std::string v = squash(value);
              int found = -1;
 diff --git a/host/keymap.hpp b/host/keymap.hpp
-index 4a0b82c..198b3aa 100644
+index 103299e..5a92039 100644
 --- a/host/keymap.hpp
 +++ b/host/keymap.hpp
-@@ -36,6 +36,9 @@ struct Config {
-     int look = -1;             // the picture look (F2) written in keys.ini, -1 when the file has no 'look' line
+@@ -37,6 +37,9 @@ struct Config {
      int scale = 0;             // the inner resolution (1 to 4 times the console's) used at the next start, 0 when the file has no 'scale' line
      int sharp_2d = -1;         // how upscaled 2D art is filtered (0 soft, 1 sharp, 2 sharpest) at the next start, -1 when the file has no line
+     std::string pace;          // the picture pace ('30', '60', 'off', ...; ps2/pace.hpp) used at the next start, "" when the file has no 'pace' line
 +    int vsync = -1;            // 1 on (the picture waits for the screen's refresh: no tearing), 0 off, -1 when the file has no line (off)
 +    int stick_deadzone = 0;    // 0 to 40 percent: a controller's stick closer to the middle than that counts as the middle (both sticks)
 +    int right_invert = 0;      // the controller's right stick turned round: 0 no, 1 left-right, 2 up-down, 3 both (the camera in most games)
  };
  
  // The picture looks the F2 key goes through. The number is also the video option bits (ps2/video.hpp): bit 0 smooth edges, bit 1 soft, bit 2 sharp (look 4: cubic enlargement + light sharpening; look 5 = sharp + smooth edges).
-@@ -50,6 +53,11 @@ std::string with_scale(const std::string &file_text, int scale);
+@@ -51,6 +54,11 @@ std::string with_scale(const std::string &file_text, int scale);
  // the same for the 'sharp_2d' line (the quick menu's 2D art filter, used when the game starts the next time)
  std::string with_sharp_2d(const std::string &file_text, int sharp);
  const char *sharp_2d_word(int sharp);  // "soft", "sharp", "sharpest"
@@ -493,10 +493,10 @@ index 0d7f486..9d20480 100644
      struct KeyRow {
          std::string label, keys;
 diff --git a/host/window.cpp b/host/window.cpp
-index d82a042..2bbe37b 100644
+index 430d27b..d90787a 100644
 --- a/host/window.cpp
 +++ b/host/window.cpp
-@@ -152,6 +152,7 @@ bool g_block_input[2] = {};
+@@ -153,6 +153,7 @@ bool g_block_input[2] = {};
  int g_stick_step[2] = {};  // the left stick moving the highlight: -1 up, 1 down, 0 near the middle
  // The inner resolution (PS2_SCALE): the one of this run, and the one keys.ini holds for the next start (the menu changes that one).
  int g_scale_now = 1, g_scale_next = 1;
@@ -504,7 +504,7 @@ index d82a042..2bbe37b 100644
  bool g_scale_locked = false;  // PS2_SCALE was set before the start: keys.ini does not count
  // The filter of upscaled 2D art (PS2_SHARP_2D: 0 soft, 1 sharp, 2 sharpest), the same way: this run's and keys.ini's for the next start.
  int g_sharp_now = 1, g_sharp_next = 1;
-@@ -795,10 +796,27 @@ void poll_port(int port) {
+@@ -796,10 +797,27 @@ void poll_port(int port) {
          };
          trigger(SDL_CONTROLLER_AXIS_TRIGGERLEFT, kL2, l2);
          trigger(SDL_CONTROLLER_AXIS_TRIGGERRIGHT, kR2, r2);
@@ -536,7 +536,7 @@ index d82a042..2bbe37b 100644
      }
      if (g_menu.is_open()) g_block_input[port] = true;
      if (g_block_input[port]) {
-@@ -904,8 +922,17 @@ void menu_paint(bool show_again = true) {
+@@ -905,8 +923,17 @@ void menu_paint(bool show_again = true) {
          v.sharp_next = g_sharp_next;
          v.sharp_locked = g_sharp_locked;
          v.fullscreen = SDL_GetWindowFlags(g_window) & SDL_WINDOW_FULLSCREEN;
@@ -555,7 +555,7 @@ index d82a042..2bbe37b 100644
              v.key_note = g_key_note;
          }
          g_menu.draw(w, h, v, g_menu_picture);
-@@ -1102,6 +1129,21 @@ void menu_command(quickmenu::Command c, int step) {
+@@ -1103,6 +1130,21 @@ void menu_command(quickmenu::Command c, int step) {
          std::fprintf(stderr, "[menu] 2D art %s for the next start (this run: %s)\n", keymap::sharp_2d_word(g_sharp_next), keymap::sharp_2d_word(g_sharp_now));
          break;
      case Command::fullscreen: toggle_fullscreen(); break;
@@ -577,9 +577,9 @@ index d82a042..2bbe37b 100644
      case Command::change_keys: g_key_note.clear(); break;  // (the menu has switched to its keys page)
      case Command::key_edit: g_key_note.clear(); break;     // (the highlighted line waits for a key now)
      case Command::key_defaults: {
-@@ -1839,6 +1881,15 @@ bool open_window(bool fullscreen) {
-         ps2::os::set_env("PS2_SCALE", std::to_string(g_keys.scale));
-         std::fprintf(stderr, "[video] resolution %dx from %s (scale = %d)\n", g_keys.scale, g_keys_path.c_str(), g_keys.scale);
+@@ -1851,6 +1893,15 @@ bool open_window(bool fullscreen) {
+         ps2::os::set_env("PS2_PACE", g_keys.pace);
+         ps2::os::set_env("PS2_PACE_FROM", g_keys_path);
      }
 +    quickmenu::set_language(ps2::os::env("PS2_MENU_LANG"));
 +    // vertical sync: PS2_PRESENT_MODE wins; else the 'vsync' line of keys.ini (on: the picture waits for the screen's refresh, fifo)
@@ -593,7 +593,7 @@ index d82a042..2bbe37b 100644
      g_scale_now = std::clamp(std::atoi(ps2::os::env("PS2_SCALE").c_str()), 1, 4);
      g_scale_next = g_scale_locked ? g_scale_now : (g_keys.scale >= 1 ? g_keys.scale : g_scale_now);
      // the 2D art filter the same way: PS2_SHARP_2D, else the 'sharp_2d' line of keys.ini, else sharp (gpu.cpp reads it at its start)
-@@ -1857,6 +1908,15 @@ bool open_window(bool fullscreen) {
+@@ -1869,6 +1920,15 @@ bool open_window(bool fullscreen) {
          std::fprintf(stderr, "SDL: %s\n", SDL_GetError());
          return false;
      }
@@ -610,18 +610,18 @@ index d82a042..2bbe37b 100644
      SDL_RaiseWindow(g_window);
  #ifdef _WIN32
 diff --git a/recomp/vurecomp_gen.cpp b/recomp/vurecomp_gen.cpp
-index ec6118c..aff8843 100644
+index 7702eed..891bd34 100644
 --- a/recomp/vurecomp_gen.cpp
 +++ b/recomp/vurecomp_gen.cpp
-@@ -639,7 +639,7 @@ std::string generate(const Program &p, std::string &name) {
+@@ -977,7 +977,7 @@ std::string generate(const Program &p0, std::string &name, const std::vector<Pro
                  else if (reg == def[(pc - 8u) & kMask]) replace_all(lcode, std::format("r.vi[{}]", reg), "bk");
              }
          }
 -        if (hi & 0x80000000u) body += std::format("r.i = {}u; ", lo);
 +        if (hi & 0x80000000u) body += std::format("std::memcpy(&r.i, r.code + {}u, 4); ", pc);  // LOI: the game may rewrite it, read it now
          else if (!l.supported) body += std::format("vu::interpret(1, {}u); return; ", pc);
-         else body += lcode;
-         if (keep_bk.count(pc)) body += "bk = next_bk; ";
+         else {
+             if (lazy && any_arith && !daz_in[pc]) replace_all(lcode, "vu::kick(1, ", "vkick_last(daz, 1, ");
 diff --git a/runtime/include/ps2/cpu.hpp b/runtime/include/ps2/cpu.hpp
 index 2823415..a37c9fb 100644
 --- a/runtime/include/ps2/cpu.hpp
@@ -637,7 +637,7 @@ index 2823415..a37c9fb 100644
  
  struct Cpu {
 diff --git a/runtime/include/ps2/system.hpp b/runtime/include/ps2/system.hpp
-index 88e7171..5a391e5 100644
+index 42df9a0..492598b 100644
 --- a/runtime/include/ps2/system.hpp
 +++ b/runtime/include/ps2/system.hpp
 @@ -107,6 +107,7 @@ std::uint64_t hblank_cycles();
@@ -649,10 +649,10 @@ index 88e7171..5a391e5 100644
  
  bool has_code(std::uint32_t pc);
 diff --git a/runtime/include/ps2/vu_ops.hpp b/runtime/include/ps2/vu_ops.hpp
-index 1026a6f..1e18f6b 100644
+index c21c291..4a571f3 100644
 --- a/runtime/include/ps2/vu_ops.hpp
 +++ b/runtime/include/ps2/vu_ops.hpp
-@@ -555,7 +555,7 @@ inline std::uint64_t program_key(const std::uint8_t *code, const std::vector<std
+@@ -575,7 +575,7 @@ inline std::uint64_t program_key(const std::uint8_t *code, const std::vector<std
          std::memcpy(&lo, code + pc, 4);
          std::memcpy(&hi, code + pc + 4, 4);
          mix(pc);
@@ -808,10 +808,10 @@ index 417554b..0503efc 100644
  bool ipu_push(const std::uint8_t *qword);
  std::size_t ipu_push_many(const std::uint8_t *qwords, std::size_t count);
 diff --git a/runtime/src/gs/gif.cpp b/runtime/src/gs/gif.cpp
-index 7e54d43..33620df 100644
+index 818e0ff..34b226f 100644
 --- a/runtime/src/gs/gif.cpp
 +++ b/runtime/src/gs/gif.cpp
-@@ -236,7 +236,16 @@ void out(int path, const std::uint8_t *data, std::uint32_t qwc) {
+@@ -260,7 +260,16 @@ void out(int path, const std::uint8_t *data, std::uint32_t qwc) {
          return;
      }
      if (gs::queue::role() != gs::queue::Role::Vu) scan(g_scan[path], data, qwc);
@@ -830,10 +830,10 @@ index 7e54d43..33620df 100644
  
  // How many of these qwords belong to the packet under way; mid_packet is left set when
 diff --git a/runtime/src/gs/gpu/gpu.cpp b/runtime/src/gs/gpu/gpu.cpp
-index 0ffb15f..91cacb3 100644
+index 5c4b1cc..74955f0 100644
 --- a/runtime/src/gs/gpu/gpu.cpp
 +++ b/runtime/src/gs/gpu/gpu.cpp
-@@ -2456,7 +2456,9 @@ static bool open_backend([[maybe_unused]] std::uint32_t backends, const char *na
+@@ -3189,7 +3189,9 @@ static bool open_backend([[maybe_unused]] std::uint32_t backends, const char *na
      };
      bool adapter_done = false;
      WGPURequestAdapterOptions options = WGPU_REQUEST_ADAPTER_OPTIONS_INIT;
@@ -844,24 +844,6 @@ index 0ffb15f..91cacb3 100644
      options.forceFallbackAdapter = std::getenv("PS2_GPU_FALLBACK") != nullptr;
      WGPURequestAdapterCallbackInfo acb = WGPU_REQUEST_ADAPTER_CALLBACK_INFO_INIT;
      acb.mode = WGPUCallbackMode_AllowSpontaneous;
-diff --git a/runtime/src/gs/queue.cpp b/runtime/src/gs/queue.cpp
-index eb04879..c556631 100644
---- a/runtime/src/gs/queue.cpp
-+++ b/runtime/src/gs/queue.cpp
-@@ -125,7 +125,13 @@ void Ring::post(Type type, std::uint32_t arg0, std::uint32_t arg1, const void *d
-         producer_waiting_.store(1);
-         if (head + pad + need - tail_.load() > capacity_) {
-             const std::uint64_t t0 = qs_on() ? now_us() : 0;
-+#if defined(_WIN32)
-+            // A wake-up from pop() can be missed here on Windows (Crash Tag Team Racing stood still for good after its intro film, the
-+            // ring drained and the producer asleep). Never sleep without a limit: look again every 2 ms.
-+            WaitOnAddress(&freed_, const_cast<std::uint32_t *>(&seen), sizeof seen, 2);
-+#else
-             wait(freed_, seen);
-+#endif
-             if (qs_on()) { QStats &q = g_qs[this == &g_render ? 0 : 1]; q.full_waits.fetch_add(1); q.full_us.fetch_add(now_us() - t0); }
-         }
-     }
 diff --git a/runtime/src/hw.cpp b/runtime/src/hw.cpp
 index f91c5f7..503cd0b 100644
 --- a/runtime/src/hw.cpp
@@ -875,7 +857,7 @@ index f91c5f7..503cd0b 100644
      return [] {};
  }
 diff --git a/runtime/src/iop/cdvd.cpp b/runtime/src/iop/cdvd.cpp
-index cba8cb6..a34888f 100644
+index f9a3e3e..50ae1fa 100644
 --- a/runtime/src/iop/cdvd.cpp
 +++ b/runtime/src/iop/cdvd.cpp
 @@ -75,15 +75,18 @@ bool trace_cd() {
@@ -899,7 +881,7 @@ index cba8cb6..a34888f 100644
  
  std::uint64_t read_cycles(std::uint32_t sectors) {
      return usec_to_cycles(400) + static_cast<std::uint64_t>(sectors) * usec_to_cycles(250);
-@@ -160,7 +163,20 @@ void install_cdvd() {
+@@ -162,7 +165,20 @@ void install_cdvd() {
          if (g_trace_hle) std::fprintf(stderr, "[cdvd] read lsn %u count %u to 0x%08X\n", arg(c, 0), arg(c, 1), arg(c, 2));
          c.r[2] = start_read(arg(c, 0), arg(c, 1), arg(c, 2), arg(c, 3), false) ? 1u : 0u;
      });
@@ -922,10 +904,10 @@ index cba8cb6..a34888f 100644
      def("cdvdman", 10, "sceCdSearchFile", [](Cpu &c) {
          const std::string name = ram_string(arg(c, 1), 256);
 diff --git a/runtime/src/iop/kernel.hpp b/runtime/src/iop/kernel.hpp
-index 207d740..6022cea 100644
+index 6a74034..f1ae3fe 100644
 --- a/runtime/src/iop/kernel.hpp
 +++ b/runtime/src/iop/kernel.hpp
-@@ -65,6 +65,7 @@ enum JobKind : std::uint32_t {
+@@ -69,6 +69,7 @@ enum JobKind : std::uint32_t {
      kJobFsvIopRead,
      kJobSifDmaCallback,
      kJobSifReply,
@@ -934,28 +916,29 @@ index 207d740..6022cea 100644
  };
  struct Job {
 diff --git a/runtime/src/kernel.cpp b/runtime/src/kernel.cpp
-index 6561c4d..4cf51d5 100644
+index 2551111..990cd85 100644
 --- a/runtime/src/kernel.cpp
 +++ b/runtime/src/kernel.cpp
-@@ -23,7 +23,7 @@ namespace ps2::kernel {
- namespace {
- 
+@@ -27,7 +27,8 @@ namespace {
  enum Status { kRun = 1, kReady = 2, kWait = 4, kSuspend = 8, kWaitSuspend = 12, kDormant = 16 };
--enum WaitType { kWaitNone, kWaitSleep, kWaitSema };
-+enum WaitType { kWaitNone, kWaitSleep, kWaitSema, kWaitVblank };
+ // kWaitPace: held by the picture pace (ps2/pace.hpp) until the vertical blank in wait_id. On a PS2 the thread would still be
+ // working, so the game sees it as ready, never as waiting.
+-enum WaitType { kWaitNone, kWaitSleep, kWaitSema, kWaitPace };
++// kWaitVblank: WaitVSync-style waits released at the next vertical blank (this project).
++enum WaitType { kWaitNone, kWaitSleep, kWaitSema, kWaitPace, kWaitVblank };
  
  constexpr std::uint32_t kKernelStackTop = 0x00080000u;
  constexpr std::uint32_t kSyscallTable = 0x00001800u;
-@@ -493,6 +493,8 @@ void service(Cpu &c) {
- }
- 
+@@ -551,6 +552,8 @@ void service(Cpu &c) {
  void on_vblank_start() {
+     ++g_pace_count.refreshes;
+     if (g_pace_held) [[unlikely]] pace_release();
 +    for (auto &[id, t] : g_threads)
 +        if ((t.status == kWait || t.status == kWaitSuspend) && t.wait == kWaitVblank) release(t, t.wait_id);
      if (!g_vsync_flag) return;
      st32(g_vsync_flag, 1);
      if (g_vsync_data) st64(g_vsync_data, hw::gs_csr());
-@@ -617,6 +619,19 @@ void handle_syscall(Cpu &c, std::uint32_t pc) {
+@@ -715,6 +718,19 @@ void handle_syscall(Cpu &c, std::uint32_t pc) {
                  if (x.status == kReady && x.priority == prio && (!first || x.order < first->order)) first = &x;
              if (first) first->order = ++g_order;
          }
@@ -976,10 +959,10 @@ index 6561c4d..4cf51d5 100644
          else g_reschedule = true;
          break;
 diff --git a/runtime/src/system.cpp b/runtime/src/system.cpp
-index 199204d..e11d1fa 100644
+index 30b3a1a..d573d41 100644
 --- a/runtime/src/system.cpp
 +++ b/runtime/src/system.cpp
-@@ -457,6 +457,10 @@ void schedule(int event, std::uint64_t at, std::function<void()> action) {
+@@ -464,6 +464,10 @@ void schedule(int event, std::uint64_t at, std::function<void()> action) {
      g_events.push_back({event, at, std::move(action)});
  }
  
@@ -991,10 +974,36 @@ index 199204d..e11d1fa 100644
      for (const Event &e : g_events)
          if (e.id == event) return e.at;
 diff --git a/runtime/src/vu_micro.cpp b/runtime/src/vu_micro.cpp
-index 64a2268..45bdf1f 100644
+index 094c4f7..0bde031 100644
 --- a/runtime/src/vu_micro.cpp
 +++ b/runtime/src/vu_micro.cpp
-@@ -843,7 +843,8 @@ bool run_compiled_vu0(std::uint32_t address) {
+@@ -809,10 +809,24 @@ struct Candidate {
+     ProgramFn jit = nullptr;
+ };
+ 
++// On VU1 the LOI immediates (the lower word of a pair whose upper word has the I bit) are left out of the comparison: games rewrite
++// them every frame, and the compiled program reads them from the code at run time (this project's fix), so the same program is kept.
+ bool candidate_matches(const Candidate &c, const std::uint8_t *unit_code) {
+     const std::uint8_t *code = c.code.data();
++    const bool skip_loi = unit_code == g_vu1_code;
+     for (std::size_t i = 0; i < c.runs.size(); i += 2) {
+-        if (std::memcmp(unit_code + c.runs[i], code, c.runs[i + 1]) != 0) return false;
++        const std::uint8_t *live = unit_code + c.runs[i];
++        if (!skip_loi) {
++            if (std::memcmp(live, code, c.runs[i + 1]) != 0) return false;
++        } else {
++            for (std::uint32_t at = 0; at < c.runs[i + 1]; at += 8) {
++                std::uint32_t hi, want_hi;
++                std::memcpy(&hi, live + at + 4, 4);
++                std::memcpy(&want_hi, code + at + 4, 4);
++                if (hi != want_hi) return false;
++                if (!(hi & 0x80000000u) && std::memcmp(live + at, code + at, 4) != 0) return false;
++            }
++        }
+         code += c.runs[i + 1];
+     }
+     return true;
+@@ -922,7 +936,8 @@ bool run_compiled_vu0(std::uint32_t address) {
      static const bool interpret_only = std::getenv("PS2_VU0_INTERPRET") != nullptr;
      if (!fn || interpret_only) return false;
      static const bool verify = std::getenv("PS2_VU0_VERIFY") != nullptr;
@@ -1004,27 +1013,7 @@ index 64a2268..45bdf1f 100644
      // Both executions start from identical state. Retain the exact result on a
      // mismatch and blacklist the program, so verification never installs bad state.
      const Vu0Regs before = g_cpu.vu0;
-@@ -892,10 +893,18 @@ struct EntryCache {
-     std::uint32_t next = 0;
- };
- 
-+// Instructions are compared without the LOI immediates (lower word of an instruction with the I bit), which games rewrite every frame.
- bool candidate_matches(const Candidate &c) {
-     const std::uint8_t *code = c.code.data();
-     for (std::size_t i = 0; i < c.runs.size(); i += 2) {
--        if (std::memcmp(g_vu1_code + c.runs[i], code, c.runs[i + 1]) != 0) return false;
-+        const std::uint8_t *live = g_vu1_code + c.runs[i];
-+        for (std::uint32_t at = 0; at < c.runs[i + 1]; at += 8) {
-+            std::uint32_t hi, want_hi;
-+            std::memcpy(&hi, live + at + 4, 4);
-+            std::memcpy(&want_hi, code + at + 4, 4);
-+            if (hi != want_hi) return false;
-+            if (!(hi & 0x80000000u) && std::memcmp(live + at, code + at, 4) != 0) return false;
-+        }
-         code += c.runs[i + 1];
-     }
-     return true;
-@@ -1025,7 +1034,7 @@ void check_jit(ProgramFn compiled, ProgramFn jit) {
+@@ -1074,7 +1089,7 @@ void check_jit(ProgramFn compiled, ProgramFn jit) {
      jit::g_dry = true;
      jit::g_escape = -1;
      jit::g_kicks = &jit_kicks;
@@ -1033,7 +1022,7 @@ index 64a2268..45bdf1f 100644
      jit::g_dry = false;
      const std::int64_t jit_escape = jit::g_escape;
      const Vu0Regs after = g_vu1;
-@@ -1035,7 +1044,7 @@ void check_jit(ProgramFn compiled, ProgramFn jit) {
+@@ -1084,7 +1099,7 @@ void check_jit(ProgramFn compiled, ProgramFn jit) {
      std::int64_t escape = -1;
      g_kick_log = &kicks;
      g_capture = &escape;
@@ -1042,7 +1031,7 @@ index 64a2268..45bdf1f 100644
      g_capture = nullptr;
      g_kick_log = nullptr;
      ++calls;
-@@ -1088,7 +1097,7 @@ void interpret(int unit, std::uint32_t pc) {
+@@ -1137,7 +1152,7 @@ void interpret(int unit, std::uint32_t pc) {
              const EntryCache &e = g_entries[(pc & 16383u) >> 3];
              if (e.generation == g_generation[1] && e.function) {
                  g_trace_vu1_pc = pc;
@@ -1051,7 +1040,7 @@ index 64a2268..45bdf1f 100644
              } else {
                  run_entry(1, pc);
              }
-@@ -1190,7 +1199,7 @@ void run_entry(int unit, std::uint32_t pc) {
+@@ -1239,7 +1254,7 @@ void run_entry(int unit, std::uint32_t pc) {
                  std::int64_t escape = -1;
                  const std::uint64_t key = program_key(g_vu1_code, reachable(g_vu1_code, 16383u, pc & 16383u), pc & 16383u);
                  g_capture = &escape;
@@ -1060,7 +1049,7 @@ index 64a2268..45bdf1f 100644
                  g_capture = nullptr;
                  const Vu0Regs after = g_vu1;
                  std::memcpy(run_mem, g_vu1_mem, sizeof run_mem);
-@@ -1230,12 +1239,12 @@ void run_entry(int unit, std::uint32_t pc) {
+@@ -1279,12 +1294,12 @@ void run_entry(int unit, std::uint32_t pc) {
              static const bool timed = std::getenv("PS2_VU_TIME") != nullptr;
              if (timed) {
                  const std::uint64_t t0 = time_stamp();
@@ -1076,10 +1065,10 @@ index 64a2268..45bdf1f 100644
          }
      }
 diff --git a/scripts/port.sh b/scripts/port.sh
-index 5e5e91c..b504c07 100644
+index 45ebc7d..7b865e0 100755
 --- a/scripts/port.sh
 +++ b/scripts/port.sh
-@@ -210,7 +210,7 @@ if [ "$explore" = 1 ]; then
+@@ -215,7 +215,7 @@ if [ "$explore" = 1 ]; then
      build_native
      rm -f "$game/misses.txt" "$game/explore.ps2" "$game/explore_ram.bin"
      code=0

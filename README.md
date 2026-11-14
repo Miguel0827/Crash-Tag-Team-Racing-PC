@@ -65,7 +65,7 @@ From a terminal: `./linux/install.sh your-game.iso`, then `./linux/play.sh` (opt
 
 ## What this project adds
 
-Fixes to ps2-native-recomp (`patches/cttr-fixes.patch`, made for commit `b1af7232b320`):
+Fixes to ps2-native-recomp (`patches/cttr-fixes.patch`, made for commit `5d1ebbcf133c`):
 
 - **Freeze after the intro film fixed**: a lost wake-up in the drawing queue on Windows (and messages too large for the queue are split).
 - **Vector unit programs no longer recompiled thousands of times**: the game rewrites the LOI constants inside its VU1 microcode every frame; they are now read at run time and ignored when a program is recognised. CPU use drops from ~95 % to normal.
